@@ -5,7 +5,179 @@ import { create } from 'zustand';
  * (minus binary assets, which are referenced by filename via `assetRef`).
  */
 
-export type FillType = 'solid' | 'wood' | 'marble' | 'noise';
+export type FillType = 'solid' | 'wood' | 'stone';
+
+/** Grain layout for the volumetric wood material. */
+export type WoodMode = 'bands' | 'rings';
+
+/**
+ * Depth-map micro-relief shared by the volumetric materials: emboss the
+ * material's feature lines (wood grooves, marble veins, travertine voids, cracks)
+ * into the height map. `mode` picks whether the feature sits proud ('add') or
+ * recessed ('subtract'). Off by default.
+ */
+export interface MicroRelief {
+  enabled: boolean;
+  /** Height perturbation (fraction of normalized relief). */
+  amount: number;
+  mode: 'add' | 'subtract';
+}
+
+export function defaultMicroRelief(mode: 'add' | 'subtract' = 'subtract'): MicroRelief {
+  return { enabled: false, amount: 0.06, mode };
+}
+
+/**
+ * Extra parameters for the volumetric ("carved from a solid block") wood
+ * material. Only meaningful when `Fill.type === 'wood'`; kept in a nested object
+ * so the other fill types aren't bloated. `Fill.color1`/`color2` are the light
+ * earlywood / dark latewood stops, `scaleMm` the grain feature size, `angle` the
+ * grain orientation; everything wood-specific lives here.
+ */
+export interface WoodParams {
+  /** Z (depth) scale relative to XY — the master "how sliced" knob. */
+  depthScale: number;
+  /** Flat-sawn plank bands (default) vs concentric end-grain rings. */
+  mode: WoodMode;
+  /** Band/ring frequency multiplier (rings per grain feature). */
+  ringDensity: number;
+  /** Large-scale domain warp (overall figure/flow). */
+  warpCoarseFreq: number;
+  warpCoarseAmp: number;
+  /** Fine domain warp (local fiber wobble). */
+  warpFineFreq: number;
+  warpFineAmp: number;
+  /** Latewood line sharpness (0 = soft, 1 = thin/dark lines). */
+  contrast: number;
+  /** Middle wood color stop (earlywood -> mid -> latewood). */
+  colorMid: string;
+  /** Low-frequency large-scale tint variation strength. */
+  tintStrength: number;
+  /** High-frequency pore/fiber detail strength. */
+  poreStrength: number;
+  /** Faint long axial streak strength. */
+  streakStrength: number;
+  /** Sparse ray-fleck (figure) strength. */
+  fleckStrength: number;
+  /** Color saturation multiplier (<1 reins in for CMYK-ish printing). */
+  saturation: number;
+  /** Deterministic seed — same value reproduces the same grain. */
+  seed: number;
+  /** Emboss latewood lines into the depth map as micro-grooves (off by default). */
+  microRelief: MicroRelief;
+}
+
+export function defaultWoodParams(): WoodParams {
+  return {
+    depthScale: 0.5,
+    mode: 'bands',
+    ringDensity: 6,
+    warpCoarseFreq: 0.35,
+    warpCoarseAmp: 0.5,
+    warpFineFreq: 2.5,
+    warpFineAmp: 0.15,
+    contrast: 0.5,
+    colorMid: '#4a3420',
+    tintStrength: 0.15,
+    poreStrength: 0.15,
+    streakStrength: 0.1,
+    fleckStrength: 0,
+    saturation: 0.9,
+    seed: 1,
+    microRelief: defaultMicroRelief('subtract'),
+  };
+}
+
+/** Which stone family `generateStone` produces. */
+export type StoneType =
+  | 'marble'
+  | 'onyx'
+  | 'sandstone'
+  | 'granite'
+  | 'terrazzo'
+  | 'travertine'
+  | 'cracked';
+
+/**
+ * Parameters for the volumetric stone material (only used when
+ * `Fill.type === 'stone'`). Grain feature size = `Fill.scaleMm`, orientation =
+ * `Fill.angle`. Groups: shared, marble veins, Voronoi (granite/terrazzo/
+ * travertine/cracked), and sedimentary strata (onyx/sandstone/travertine).
+ */
+export interface StoneParams {
+  stoneType: StoneType;
+  // shared
+  depthScale: number;
+  seed: number;
+  warpCoarseFreq: number;
+  warpCoarseAmp: number;
+  warpFineFreq: number;
+  warpFineAmp: number;
+  contrast: number;
+  tintStrength: number;
+  saturation: number;
+  /** Primary multi-stop color ramp (onyx/sandstone/travertine/cracked/granite specks). */
+  colorStops: string[];
+  matrixColor: string;
+  veinColor: string;
+  microRelief: MicroRelief;
+  // marble
+  veinFreqPrimary: number;
+  veinFreqSecondary: number;
+  secondaryVeinStrength: number;
+  turbulenceFreq: number;
+  turbulenceAmp: number;
+  veinSharpness: number;
+  invert: boolean;
+  // voronoi
+  cellScale: number;
+  cellScale2: number;
+  cellScale3: number;
+  speckleIntensity: number;
+  edgeWidth: number;
+  crackIntensity: number;
+  aggregatePalette: string[];
+  // strata
+  strataDensity: number;
+  strataAxis: 0 | 1 | 2; // 0 = Z (default), 1 = Y, 2 = X
+  strataWaviness: number;
+}
+
+export function defaultStoneParams(): StoneParams {
+  return {
+    stoneType: 'marble',
+    depthScale: 0.5,
+    seed: 1,
+    warpCoarseFreq: 0.35,
+    warpCoarseAmp: 0.4,
+    warpFineFreq: 2.5,
+    warpFineAmp: 0.12,
+    contrast: 0.5,
+    tintStrength: 0.12,
+    saturation: 0.9,
+    colorStops: ['#efece6', '#cfc9bf', '#8f8a80'],
+    matrixColor: '#eceae4',
+    veinColor: '#7d7a72',
+    microRelief: defaultMicroRelief('add'),
+    veinFreqPrimary: 2.2,
+    veinFreqSecondary: 7,
+    secondaryVeinStrength: 0.35,
+    turbulenceFreq: 1.2,
+    turbulenceAmp: 1.4,
+    veinSharpness: 0.6,
+    invert: false,
+    cellScale: 6,
+    cellScale2: 11,
+    cellScale3: 20,
+    speckleIntensity: 0.8,
+    edgeWidth: 0.06,
+    crackIntensity: 0.8,
+    aggregatePalette: ['#b5b0a6', '#8a5a44', '#4f6b57', '#c9c3b8', '#6b6f76'],
+    strataDensity: 3,
+    strataAxis: 0,
+    strataWaviness: 0.4,
+  };
+}
 
 /** A solid color or a procedural texture, evaluated in canvas XY (mm). */
 export interface Fill {
@@ -18,10 +190,227 @@ export interface Fill {
   turbulence: number;
   /** Pattern rotation in degrees. */
   angle: number;
+  /** Volumetric-wood parameters (only used when `type === 'wood'`). */
+  wood?: WoodParams;
+  /** Volumetric-stone parameters (only used when `type === 'stone'`). */
+  stone?: StoneParams;
 }
 
 export function solidFill(color: string): Fill {
   return { type: 'solid', color1: color, color2: '#5a4632', scaleMm: 12, turbulence: 0.6, angle: 0 };
+}
+
+/**
+ * Species presets for the volumetric wood material: a full `Fill` (color stops +
+ * grain knobs) tuned per wood. Applied by the material UI when the user picks a
+ * preset. Grain scale/angle live on the `Fill`; the rest on `Fill.wood`.
+ */
+export const WOOD_PRESETS: Record<string, () => Fill> = {
+  walnut: () => ({
+    type: 'wood',
+    color1: '#6b4a30',
+    color2: '#241509',
+    scaleMm: 26,
+    turbulence: 0.6,
+    angle: 0,
+    wood: {
+      ...defaultWoodParams(),
+      colorMid: '#43290f',
+      depthScale: 0.6,
+      ringDensity: 5,
+      warpCoarseAmp: 0.55,
+      contrast: 0.55,
+      tintStrength: 0.2,
+      poreStrength: 0.18,
+    },
+  }),
+  oak: () => ({
+    type: 'wood',
+    color1: '#c9a97a',
+    color2: '#6f4f2a',
+    scaleMm: 34,
+    turbulence: 0.4,
+    angle: 0,
+    wood: {
+      ...defaultWoodParams(),
+      colorMid: '#a8814f',
+      depthScale: 0.4,
+      ringDensity: 8,
+      warpCoarseAmp: 0.3,
+      warpFineAmp: 0.1,
+      contrast: 0.45,
+      tintStrength: 0.12,
+      poreStrength: 0.3,
+      streakStrength: 0.18,
+      fleckStrength: 0.2,
+    },
+  }),
+  olive: () => ({
+    type: 'wood',
+    color1: '#cbb78c',
+    color2: '#4f3a1e',
+    scaleMm: 20,
+    turbulence: 0.9,
+    angle: 0,
+    wood: {
+      ...defaultWoodParams(),
+      colorMid: '#8a6a38',
+      depthScale: 1.2,
+      ringDensity: 4,
+      warpCoarseFreq: 0.5,
+      warpCoarseAmp: 1.1,
+      warpFineFreq: 3,
+      warpFineAmp: 0.25,
+      contrast: 0.65,
+      tintStrength: 0.3,
+      poreStrength: 0.12,
+      fleckStrength: 0.15,
+    },
+  }),
+};
+
+/** Build a stone `Fill` from stoneType + param overrides (preset helper). */
+function stoneFill(over: Partial<StoneParams> & { scaleMm?: number; angle?: number }): Fill {
+  const { scaleMm = 40, angle = 0, ...stoneOver } = over;
+  return {
+    type: 'stone',
+    color1: '#ffffff',
+    color2: '#000000',
+    scaleMm,
+    turbulence: 0.5,
+    angle,
+    stone: { ...defaultStoneParams(), ...stoneOver },
+  };
+}
+
+/**
+ * Stone presets: one starter per stoneType plus curated named marbles. Same
+ * shape as `WOOD_PRESETS` (a full `Fill` per entry) so a richer curated presets
+ * file can extend or replace this map.
+ */
+export const STONE_PRESETS: Record<string, () => Fill> = {
+  // Starters (one per family)
+  marble: () => stoneFill({ stoneType: 'marble' }),
+  onyx: () =>
+    stoneFill({
+      stoneType: 'onyx',
+      scaleMm: 60,
+      strataDensity: 2.5,
+      warpCoarseAmp: 0.7,
+      colorStops: ['#d9b98a', '#b5793f', '#8a4a24', '#e6cfa8'],
+      veinColor: '#5b3218',
+    }),
+  sandstone: () =>
+    stoneFill({
+      stoneType: 'sandstone',
+      strataDensity: 5,
+      strataWaviness: 0.5,
+      colorStops: ['#d8bf95', '#c9a56f', '#b98d55'],
+    }),
+  granite: () =>
+    stoneFill({
+      stoneType: 'granite',
+      scaleMm: 30,
+      matrixColor: '#8a8580',
+      veinColor: '#2c2622',
+      colorStops: ['#efe9df', '#b76b52', '#3a3430'],
+      speckleIntensity: 0.9,
+    }),
+  terrazzo: () =>
+    stoneFill({
+      stoneType: 'terrazzo',
+      cellScale: 5,
+      edgeWidth: 0.05,
+      matrixColor: '#e7e3da',
+      aggregatePalette: ['#b5b0a6', '#8a5a44', '#4f6b57', '#c9c3b8', '#6b6f76', '#a53f3f'],
+    }),
+  travertine: () =>
+    stoneFill({
+      stoneType: 'travertine',
+      strataDensity: 4,
+      cellScale: 9,
+      colorStops: ['#e7d8bf', '#d3bd97', '#b8996f'],
+      microRelief: { enabled: false, amount: 0.08, mode: 'subtract' },
+    }),
+  cracked: () =>
+    stoneFill({
+      stoneType: 'cracked',
+      cellScale: 6,
+      crackIntensity: 0.9,
+      edgeWidth: 0.05,
+      colorStops: ['#9a938a', '#7a736a', '#575049'],
+      veinColor: '#1c1814',
+      microRelief: { enabled: false, amount: 0.08, mode: 'subtract' },
+    }),
+  // Curated marbles
+  carrara: () =>
+    stoneFill({
+      stoneType: 'marble',
+      matrixColor: '#f2f1ec',
+      veinColor: '#9aa0a2',
+      veinFreqPrimary: 2.4,
+      secondaryVeinStrength: 0.4,
+      veinSharpness: 0.55,
+      turbulenceAmp: 1.5,
+    }),
+  calacatta: () =>
+    stoneFill({
+      stoneType: 'marble',
+      matrixColor: '#f6f4ee',
+      veinColor: '#a07a3f',
+      veinFreqPrimary: 1.6,
+      secondaryVeinStrength: 0.5,
+      veinSharpness: 0.7,
+      turbulenceAmp: 1.8,
+      scaleMm: 55,
+    }),
+  neroMarquina: () =>
+    stoneFill({
+      stoneType: 'marble',
+      matrixColor: '#14140f',
+      veinColor: '#eae6dc',
+      veinFreqPrimary: 2.0,
+      secondaryVeinStrength: 0.3,
+      veinSharpness: 0.75,
+      turbulenceAmp: 1.3,
+      saturation: 0.85,
+    }),
+  verde: () =>
+    stoneFill({
+      stoneType: 'marble',
+      matrixColor: '#1f3a2c',
+      veinColor: '#cfe3d0',
+      veinFreqPrimary: 2.6,
+      secondaryVeinStrength: 0.6,
+      veinSharpness: 0.7,
+      turbulenceAmp: 2.0,
+      saturation: 0.95,
+    }),
+};
+
+/**
+ * Normalize a raw (possibly legacy) fill from imported JSON. Legacy 2D fills are
+ * migrated: `marble` -> volumetric stone (marble), `noise` -> solid. Also fills
+ * in the wood `microRelief` object if an older `microReliefAmount` is present.
+ */
+export function migrateFill(raw: unknown): Fill {
+  const f = { ...(raw as Record<string, unknown>) } as unknown as Fill;
+  const legacyType = f.type as string;
+  if (legacyType === 'marble') {
+    return { ...f, type: 'stone', stone: f.stone ?? defaultStoneParams() };
+  }
+  if (legacyType === 'noise') {
+    return { ...f, type: 'solid' };
+  }
+  // Legacy wood: microReliefAmount -> microRelief object.
+  if (f.type === 'wood' && f.wood && (f.wood as { microRelief?: MicroRelief }).microRelief === undefined) {
+    const amount = (f.wood as { microReliefAmount?: number }).microReliefAmount ?? 0;
+    f.wood = {
+      ...(f.wood as WoodParams),
+      microRelief: { enabled: amount > 0, amount: amount || 0.06, mode: 'subtract' },
+    };
+  }
+  return f;
 }
 
 export interface DepthRange {

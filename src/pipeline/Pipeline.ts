@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { ModelAsset } from '../assets/assetStore';
 import type { Fill, ModelSettings, Project } from '../state/store';
-import { outputResolution } from '../state/store';
+import { defaultStoneParams, defaultWoodParams, outputResolution } from '../state/store';
 import { getImageAsset } from '../assets/assetStore';
 import { ModelDepthPass } from '../obj/ModelDepthPass';
 import { resolveModel } from '../obj/modelSource';
@@ -36,7 +36,40 @@ function hexToRgb(hex: string): [number, number, number] {
   return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
 }
 
-const FILL_TYPE_ID: Record<Fill['type'], number> = { solid: 0, wood: 1, marble: 2, noise: 3 };
+const FILL_TYPE_ID: Record<Fill['type'], number> = { solid: 0, wood: 1, stone: 2 };
+
+const STONE_TYPE_ID: Record<string, number> = {
+  marble: 0,
+  onyx: 1,
+  sandstone: 2,
+  granite: 3,
+  terrazzo: 4,
+  travertine: 5,
+  cracked: 6,
+};
+
+const MAX_STOPS = 6;
+
+/** A uniform holding a fixed-length array of `MAX_STOPS` vec3 colors. */
+function colorArrayUniform(): THREE.IUniform {
+  return { value: Array.from({ length: MAX_STOPS }, () => new THREE.Color()) };
+}
+
+/** Fill a fixed-length Color array from hex stops; returns the used count. */
+function setColorArray(arr: THREE.Color[], hexes: string[]): number {
+  const count = Math.min(Math.max(hexes.length, 1), MAX_STOPS);
+  for (let i = 0; i < count; i++) arr[i].set(...(hexToRgb(hexes[i] ?? '#000000') as [number, number, number]));
+  return count;
+}
+
+/** Deterministic seed -> a stable pseudo-random offset into the 3D noise field. */
+function seedToVec3(seed: number, out: THREE.Vector3): void {
+  const off = (k: number) => {
+    const s = Math.sin(seed * k) * 43758.5453;
+    return (s - Math.floor(s)) * 100;
+  };
+  out.set(off(12.9898), off(78.233), off(37.719));
+}
 
 /** Uniform definitions for the shared procedural fill (one set per material). */
 function fillUniformDefs(): Record<string, THREE.IUniform> {
@@ -47,6 +80,51 @@ function fillUniformDefs(): Record<string, THREE.IUniform> {
     uFillScale: { value: 1 },
     uFillTurb: { value: 0 },
     uFillAngle: { value: 0 },
+    // Volumetric-wood params (used when uFillType === 1).
+    uWoodDepthScale: { value: 0.5 },
+    uWoodMode: { value: 0 },
+    uWoodRingDensity: { value: 6 },
+    uWoodWarpCoarse: { value: new THREE.Vector2(0.35, 0.5) },
+    uWoodWarpFine: { value: new THREE.Vector2(2.5, 0.15) },
+    uWoodContrast: { value: 0.5 },
+    uWoodColorMid: { value: new THREE.Color() },
+    uWoodTint: { value: 0.15 },
+    uWoodPore: { value: 0.15 },
+    uWoodStreak: { value: 0.1 },
+    uWoodFleck: { value: 0 },
+    uWoodSaturation: { value: 0.9 },
+    uWoodSeed: { value: new THREE.Vector3() },
+    // Volumetric-stone params (used when uFillType === 2).
+    uStoneType: { value: 0 },
+    uStoneDepthScale: { value: 0.5 },
+    uStoneSeed: { value: new THREE.Vector3() },
+    uStoneWarpCoarse: { value: new THREE.Vector2(0.35, 0.4) },
+    uStoneWarpFine: { value: new THREE.Vector2(2.5, 0.12) },
+    uStoneContrast: { value: 0.5 },
+    uStoneTint: { value: 0.12 },
+    uStoneSaturation: { value: 0.9 },
+    uStops: colorArrayUniform(),
+    uStopCount: { value: 3 },
+    uAggPalette: colorArrayUniform(),
+    uAggCount: { value: 5 },
+    uMatrixColor: { value: new THREE.Color() },
+    uVeinColor: { value: new THREE.Color() },
+    uVeinFreqPrimary: { value: 2.2 },
+    uVeinFreqSecondary: { value: 7 },
+    uSecondaryVeinStrength: { value: 0.35 },
+    uTurbFreq: { value: 1.2 },
+    uTurbAmp: { value: 1.4 },
+    uVeinSharpness: { value: 0.6 },
+    uInvert: { value: 0 },
+    uCellScale: { value: 6 },
+    uCellScale2: { value: 11 },
+    uCellScale3: { value: 20 },
+    uSpeckleIntensity: { value: 0.8 },
+    uEdgeWidth: { value: 0.06 },
+    uCrackIntensity: { value: 0.8 },
+    uStrataDensity: { value: 3 },
+    uStrataAxis: { value: 0 },
+    uStrataWaviness: { value: 0.4 },
   };
 }
 
@@ -187,6 +265,10 @@ export class Pipeline {
         uStretchMax: { value: 1 },
         uDetail: { value: 0 },
         uGamma: { value: 1 },
+        uSizeMm: { value: new THREE.Vector2() },
+        uMatReliefAmount: { value: 0 },
+        uMatReliefSign: { value: -1 },
+        ...fillUniformDefs(), // for the material micro-relief mask function
       }),
       tile: new THREE.ShaderMaterial({
         vertexShader: VERT,
@@ -280,6 +362,54 @@ export class Pipeline {
     u.uFillScale.value = fill.scaleMm;
     u.uFillTurb.value = fill.turbulence;
     u.uFillAngle.value = (fill.angle * Math.PI) / 180;
+
+    // Volumetric wood params (legacy 'wood' fills without a `wood` block fall
+    // back to defaults so they still render).
+    const w = fill.wood ?? defaultWoodParams();
+    u.uWoodDepthScale.value = w.depthScale;
+    u.uWoodMode.value = w.mode === 'rings' ? 1 : 0;
+    u.uWoodRingDensity.value = w.ringDensity;
+    (u.uWoodWarpCoarse.value as THREE.Vector2).set(w.warpCoarseFreq, w.warpCoarseAmp);
+    (u.uWoodWarpFine.value as THREE.Vector2).set(w.warpFineFreq, w.warpFineAmp);
+    u.uWoodContrast.value = w.contrast;
+    (u.uWoodColorMid.value as THREE.Color).set(...(hexToRgb(w.colorMid) as [number, number, number]));
+    u.uWoodTint.value = w.tintStrength;
+    u.uWoodPore.value = w.poreStrength;
+    u.uWoodStreak.value = w.streakStrength;
+    u.uWoodFleck.value = w.fleckStrength;
+    u.uWoodSaturation.value = w.saturation;
+    seedToVec3(w.seed, u.uWoodSeed.value as THREE.Vector3);
+
+    // Volumetric stone params (fallback to defaults if the block is absent).
+    const s = fill.stone ?? defaultStoneParams();
+    u.uStoneType.value = STONE_TYPE_ID[s.stoneType] ?? 0;
+    u.uStoneDepthScale.value = s.depthScale;
+    seedToVec3(s.seed, u.uStoneSeed.value as THREE.Vector3);
+    (u.uStoneWarpCoarse.value as THREE.Vector2).set(s.warpCoarseFreq, s.warpCoarseAmp);
+    (u.uStoneWarpFine.value as THREE.Vector2).set(s.warpFineFreq, s.warpFineAmp);
+    u.uStoneContrast.value = s.contrast;
+    u.uStoneTint.value = s.tintStrength;
+    u.uStoneSaturation.value = s.saturation;
+    u.uStopCount.value = setColorArray(u.uStops.value as THREE.Color[], s.colorStops);
+    u.uAggCount.value = setColorArray(u.uAggPalette.value as THREE.Color[], s.aggregatePalette);
+    (u.uMatrixColor.value as THREE.Color).set(...(hexToRgb(s.matrixColor) as [number, number, number]));
+    (u.uVeinColor.value as THREE.Color).set(...(hexToRgb(s.veinColor) as [number, number, number]));
+    u.uVeinFreqPrimary.value = s.veinFreqPrimary;
+    u.uVeinFreqSecondary.value = s.veinFreqSecondary;
+    u.uSecondaryVeinStrength.value = s.secondaryVeinStrength;
+    u.uTurbFreq.value = s.turbulenceFreq;
+    u.uTurbAmp.value = s.turbulenceAmp;
+    u.uVeinSharpness.value = s.veinSharpness;
+    u.uInvert.value = s.invert ? 1 : 0;
+    u.uCellScale.value = s.cellScale;
+    u.uCellScale2.value = s.cellScale2;
+    u.uCellScale3.value = s.cellScale3;
+    u.uSpeckleIntensity.value = s.speckleIntensity;
+    u.uEdgeWidth.value = s.edgeWidth;
+    u.uCrackIntensity.value = s.crackIntensity;
+    u.uStrataDensity.value = s.strataDensity;
+    u.uStrataAxis.value = s.strataAxis;
+    u.uStrataWaviness.value = s.strataWaviness;
   }
 
   /** Sample the border profile spline into the 1D lookup texture. */
@@ -807,6 +937,24 @@ export class Pipeline {
     md.uniforms.uGamma.value = model.gamma;
     md.uniforms.uMin.value = model.depth.min;
     md.uniforms.uMax.value = model.depth.max;
+
+    // Optional material micro-relief: emboss the same feature the color pass
+    // draws (wood grooves, marble veins proud, travertine voids / cracks
+    // recessed) into the depth. setFill mirrors the color pass so it registers.
+    const micro =
+      model.fill.type === 'wood'
+        ? (model.fill.wood ?? defaultWoodParams()).microRelief
+        : model.fill.type === 'stone'
+          ? (model.fill.stone ?? defaultStoneParams()).microRelief
+          : null;
+    const reliefOn = !!micro && micro.enabled && micro.amount > 0;
+    md.uniforms.uMatReliefAmount.value = reliefOn ? micro!.amount : 0;
+    md.uniforms.uMatReliefSign.value = micro && micro.mode === 'add' ? 1 : -1;
+    if (reliefOn) {
+      this.setFill(md, model.fill);
+      const heightMm = widthMm * (this.height / Math.max(this.width, 1));
+      (md.uniforms.uSizeMm.value as THREE.Vector2).set(widthMm, heightMm);
+    }
     this.pass(md, out);
   }
 
