@@ -133,6 +133,30 @@ export function NumberField({
   );
 }
 
+/** Numeric seed field with a dice button that rolls a fresh random seed. */
+export function SeedField({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <div className="seed-field">
+      <NumberField label="Seed" value={value} step={1} onChange={onChange} />
+      <button
+        type="button"
+        className="dice-btn"
+        title="Random seed"
+        aria-label="Randomize seed"
+        onClick={() => onChange(Math.floor(Math.random() * 1_000_000))}
+      >
+        🎲
+      </button>
+    </div>
+  );
+}
+
 export function ColorField({
   label,
   value,
@@ -480,12 +504,7 @@ function WoodEditor({ fill, onChange }: { fill: Fill; onChange: (fill: Fill) => 
         step={0.02}
         onChange={(v) => setWood({ saturation: v })}
       />
-      <NumberField
-        label="Seed"
-        value={wood.seed}
-        step={1}
-        onChange={(v) => setWood({ seed: v })}
-      />
+      <SeedField value={wood.seed} onChange={(v) => setWood({ seed: v })} />
 
       <MicroReliefEditor
         label="Emboss grain into depth (micro-relief)"
@@ -661,7 +680,7 @@ function StoneEditor({ fill, onChange }: { fill: Fill; onChange: (fill: Fill) =>
         </>
       )}
 
-      <NumberField label="Seed" value={stone.seed} step={1} onChange={(v) => setStone({ seed: v })} />
+      <SeedField value={stone.seed} onChange={(v) => setStone({ seed: v })} />
       <MicroReliefEditor
         label="Emboss veins/voids into depth (micro-relief)"
         micro={stone.microRelief}
