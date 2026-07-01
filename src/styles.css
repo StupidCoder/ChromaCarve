@@ -692,7 +692,7 @@ button:active {
 .progress-overlay {
   position: fixed;
   left: 50%;
-  bottom: 24px;
+  bottom: 64px; /* clears the bottom-center footer */
   transform: translateX(-50%);
   z-index: 80;
   pointer-events: none;
@@ -736,6 +736,165 @@ button:active {
   background: var(--accent-grad);
   border-radius: 999px;
   transition: width 0.15s ease;
+}
+
+/* ------------------------------------------------------------------ footer */
+
+.app-footer {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  z-index: 58;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px 6px 14px;
+  font-size: 12px;
+  color: var(--text-dim);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  box-shadow: var(--shadow-fab);
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  animation: fabIn 0.25s cubic-bezier(0.2, 0.85, 0.25, 1) both;
+}
+
+.app-footer__sep {
+  color: var(--border-strong);
+}
+
+.app-footer__text {
+  white-space: nowrap;
+}
+
+.app-footer__link {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.app-footer__link:hover {
+  text-decoration: underline;
+}
+
+.help-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  color: #fff;
+  background: var(--accent-grad);
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  box-shadow: 0 0 12px rgba(123, 130, 255, 0.5);
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.help-btn:hover {
+  transform: scale(1.1);
+  box-shadow: 0 0 18px rgba(123, 130, 255, 0.85);
+}
+
+/* -------------------------------------------------------------- help modal */
+
+.help-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(6, 7, 9, 0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  animation: fadeUp 0.2s ease both;
+}
+
+.help-modal {
+  width: 560px;
+  max-width: 100%;
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+  background: var(--panel-solid);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.help-modal__header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent);
+}
+
+.help-modal__body {
+  padding: 6px 20px 20px;
+  overflow-y: auto;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.help-lead {
+  font-size: 13.5px;
+}
+
+.help-modal__body h4 {
+  margin: 18px 0 8px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-dim);
+}
+
+.help-steps,
+.help-list {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.help-steps li,
+.help-list li {
+  margin: 6px 0;
+}
+
+.help-modal__body code {
+  background: rgba(255, 255, 255, 0.08);
+  padding: 1px 5px;
+  border-radius: 5px;
+  font-size: 12px;
+}
+
+.help-foot {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+
+.help-foot a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.help-foot a:hover {
+  text-decoration: underline;
 }
 
 @media (prefers-reduced-motion: reduce) {

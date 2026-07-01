@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { Footer } from './components/Footer';
 import { PreviewPanel } from './components/panels/PreviewPanel';
 import { SettingsPanel } from './components/panels/SettingsPanel';
 import { ProgressBar } from './components/ProgressBar';
@@ -31,6 +32,7 @@ export default function App() {
       <img src="/ChromaCarve_small.png" alt="ChromaCarve" className="app-logo" />
       <SettingsPanel />
       <PreviewPanel />
+      <Footer />
       <ProgressBar />
       <Splash />
     </div>
