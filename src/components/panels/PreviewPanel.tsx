@@ -1,7 +1,7 @@
-import { useEffect, useRef } from 'react';
-import { renderPreviewComposite } from '../pipeline/composite';
-import { useProjectStore } from '../state/store';
-import { Viewer3D } from '../three/Viewer3D';
+import { useEffect, useRef, useState } from 'react';
+import { renderPreviewComposite } from '../../pipeline/composite';
+import { outputResolution, previewProject, useProjectStore } from '../../state/store';
+import { NumberField } from '../controls';
 
 /** Write composite color (rgba float, bottom-up) into a top-down ImageData. */
 function drawColor(ctx: CanvasRenderingContext2D, buf: Float32Array, w: number, h: number) {
@@ -41,7 +41,8 @@ function drawDepth(
   ctx.putImageData(img, 0, 0);
 }
 
-export function Preview2D() {
+/** The Depth + Color map canvases, redrawn from the preview composite. */
+function MapCanvases() {
   const project = useProjectStore((s) => s.project);
   const assetVersion = useProjectStore((s) => s.assetVersion);
   const reliefVersion = useProjectStore((s) => s.reliefVersion);
@@ -69,18 +70,76 @@ export function Preview2D() {
   }, [project, assetVersion, reliefVersion]);
 
   return (
-    <div className="previews">
+    <div className="map-grid">
       <div className="preview-tile">
         <div className="preview-label">Depth</div>
         <canvas ref={depthRef} className="preview-canvas" />
       </div>
       <div className="preview-tile">
-        <div className="preview-label">3D</div>
-        <Viewer3D size={360} />
-      </div>
-      <div className="preview-tile">
         <div className="preview-label">Color</div>
         <canvas ref={colorRef} className="preview-canvas" />
+      </div>
+    </div>
+  );
+}
+
+/** Right floating panel: 3D preview controls + the depth / color map canvases. */
+export function PreviewPanel() {
+  const project = useProjectStore((s) => s.project);
+  const output = project.output;
+  const update = useProjectStore((s) => s.update);
+  const [collapsed, setCollapsed] = useState(true);
+
+  if (collapsed) {
+    return (
+      <button
+        className="panel-fab panel-fab--right"
+        onClick={() => setCollapsed(false)}
+        title="Show preview maps"
+        aria-label="Show preview maps"
+      >
+        <span className="panel-fab__icon">▣</span>
+        <span className="panel-fab__text">Maps</span>
+      </button>
+    );
+  }
+
+  const previewRes = outputResolution(previewProject(project).output);
+
+  return (
+    <div className="floating-panel floating-panel--right panel-enter">
+      <div className="panel-topbar">
+        <span className="brand">Preview</span>
+        <button
+          className="icon-btn"
+          onClick={() => setCollapsed(true)}
+          title="Collapse"
+          aria-label="Collapse preview maps"
+        >
+          ›
+        </button>
+      </div>
+      <div className="floating-panel__body">
+        <div className="tab-body">
+          <NumberField
+            label="Preview max depth (mm)"
+            value={output.previewMaxDepthMm}
+            min={0.1}
+            step={0.5}
+            onChange={(v) => update((p) => void (p.output.previewMaxDepthMm = v))}
+          />
+          <NumberField
+            label="Preview resolution (px / mm)"
+            value={output.previewPixelsPerMm}
+            min={1}
+            step={1}
+            onChange={(v) => update((p) => void (p.output.previewPixelsPerMm = v))}
+          />
+          <div className="muted">
+            Preview: {previewRes.width} × {previewRes.height} px
+          </div>
+          <MapCanvases />
+        </div>
       </div>
     </div>
   );

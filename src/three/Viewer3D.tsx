@@ -27,8 +27,12 @@ function makeDataTexture(w: number, h: number, data: Float32Array) {
  * Lit 3D relief preview. Uses its own renderer/context for the display and
  * pulls the composite (at preview resolution) from the pipeline. Displaces a
  * high-res plane by the depth map, shaded by an orbiting point light + specular.
+ *
+ * Fills its parent container (which should establish a size / positioning
+ * context) and tracks resizes via a `ResizeObserver`, keeping the renderer and
+ * camera aspect in sync so the preview can occupy the whole viewport.
  */
-export function Viewer3D({ size = 320 }: { size?: number }) {
+export function Viewer3D() {
   const project = useProjectStore((s) => s.project);
   const assetVersion = useProjectStore((s) => s.assetVersion);
   const reliefVersion = useProjectStore((s) => s.reliefVersion);
@@ -52,14 +56,22 @@ export function Viewer3D({ size = 320 }: { size?: number }) {
 
   // One-time setup + animation loop.
   useEffect(() => {
+    const mount = mountRef.current!;
+    const initW = Math.max(1, mount.clientWidth);
+    const initH = Math.max(1, mount.clientHeight);
+
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(window.devicePixelRatio);
-    renderer.setSize(size, size);
+    renderer.setSize(initW, initH, false);
     renderer.setClearColor(0x0c0d10, 1);
-    mountRef.current!.appendChild(renderer.domElement);
+    mount.appendChild(renderer.domElement);
+    // Let the canvas track the mount box; sizing is driven by the observer below.
+    renderer.domElement.style.width = '100%';
+    renderer.domElement.style.height = '100%';
+    renderer.domElement.style.display = 'block';
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(40, 1, 0.01, 100);
+    const camera = new THREE.PerspectiveCamera(40, initW / initH, 0.01, 100);
     camera.up.set(0, 0, 1);
     camera.position.set(0, -2.6, 2.0);
 
@@ -93,6 +105,17 @@ export function Viewer3D({ size = 320 }: { size?: number }) {
       depthTex: null, colorTex: null, texW: 0, texH: 0, planeW: 0, planeH: 0, seg: 0,
     };
 
+    // Keep the renderer + camera in sync with the mount box (full-viewport).
+    const resize = () => {
+      const w = Math.max(1, mount.clientWidth);
+      const h = Math.max(1, mount.clientHeight);
+      renderer.setSize(w, h, false);
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+    };
+    const observer = new ResizeObserver(resize);
+    observer.observe(mount);
+
     let raf = 0;
     const start = performance.now();
     const loop = () => {
@@ -108,6 +131,7 @@ export function Viewer3D({ size = 320 }: { size?: number }) {
 
     return () => {
       cancelAnimationFrame(raf);
+      observer.disconnect();
       controls.dispose();
       mesh.geometry.dispose();
       engine.current?.depthTex?.dispose();
@@ -116,7 +140,7 @@ export function Viewer3D({ size = 320 }: { size?: number }) {
       renderer.domElement.remove();
       engine.current = null;
     };
-  }, [size]);
+  }, []);
 
   // Pull the preview composite and update the mesh.
   useEffect(() => {
@@ -164,11 +188,5 @@ export function Viewer3D({ size = 320 }: { size?: number }) {
     u.uStepWorld.value.set(pw / seg, ph / seg);
   }, [project, assetVersion, reliefVersion]);
 
-  return (
-    <div
-      ref={mountRef}
-      title="drag to orbit"
-      style={{ width: size, height: size, border: '1px solid var(--border)' }}
-    />
-  );
+  return <div ref={mountRef} title="drag to orbit" className="viewer3d" />;
 }
