@@ -465,6 +465,49 @@ export function ForegroundPanel() {
         onChange={(v) => update((p) => void (p.foreground.model.gamma = v))}
       />
       <Toggle
+        label="Bas-relief (dissolve cliffs)"
+        checked={fg.model.basRelief}
+        onChange={(v) => update((p) => void (p.foreground.model.basRelief = v))}
+      />
+      {fg.model.basRelief && (
+        <>
+          <Slider
+            label="Detail preservation (β)"
+            value={fg.model.reliefBeta}
+            min={0.1}
+            max={1}
+            step={0.01}
+            onChange={(v) => update((p) => void (p.foreground.model.reliefBeta = v))}
+          />
+          <Slider
+            label="Outline dissolve (γ)"
+            value={fg.model.reliefWallGamma}
+            min={0}
+            max={0.1}
+            step={0.005}
+            format={(v) => v.toFixed(3)}
+            onChange={(v) => update((p) => void (p.foreground.model.reliefWallGamma = v))}
+          />
+          <Slider
+            label="Wall threshold (τ pct)"
+            value={fg.model.reliefTauPct}
+            min={0.8}
+            max={0.99}
+            step={0.01}
+            format={(v) => `${(v * 100).toFixed(0)}%`}
+            onChange={(v) => update((p) => void (p.foreground.model.reliefTauPct = v))}
+          />
+          <Slider
+            label="Compression (α factor)"
+            value={fg.model.reliefAlphaFactor}
+            min={0.02}
+            max={0.3}
+            step={0.01}
+            onChange={(v) => update((p) => void (p.foreground.model.reliefAlphaFactor = v))}
+          />
+        </>
+      )}
+      <Toggle
         label="Supersample (2×)"
         checked={fg.model.supersample}
         onChange={(v) => update((p) => void (p.foreground.model.supersample = v))}

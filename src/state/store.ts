@@ -81,6 +81,21 @@ export interface ModelSettings {
   detail: number;
   /** Gamma curve on the normalized depth (1 = linear, <1 lifts low relief). */
   gamma: number;
+  /**
+   * Bas-relief mode: replace the raw orthographic height field with
+   * gradient-domain relief (Weyrich et al. 2007 / Fattal et al. 2002) — dissolve
+   * silhouette cliffs and compress large gradients while preserving fine detail.
+   * When off, the raw height path is used (unchanged).
+   */
+  basRelief: boolean;
+  /** Fattal exponent in (0,1): <1 compresses large gradients, keeps detail. */
+  reliefBeta: number;
+  /** Wall threshold as a percentile of gradient magnitude (per-image). */
+  reliefTauPct: number;
+  /** Multiplier for gradients above the wall threshold (0 = fully dissolve). */
+  reliefWallGamma: number;
+  /** alpha = reliefAlphaFactor × mean gradient magnitude (Fattal reference). */
+  reliefAlphaFactor: number;
   /** Render the model depth at 2x and downsample to reduce edge aliasing. */
   supersample: boolean;
   /**
@@ -186,6 +201,11 @@ export function defaultProject(): Project {
         normalizeDepth: true,
         detail: 0,
         gamma: 1,
+        basRelief: false,
+        reliefBeta: 0.85,
+        reliefTauPct: 0.95,
+        reliefWallGamma: 0,
+        reliefAlphaFactor: 0.1,
         supersample: false,
         edgeFalloffMm: 0,
         aoStrength: 0.5,
@@ -228,6 +248,11 @@ export function defaultProject(): Project {
         normalizeDepth: true,
         detail: 0,
         gamma: 1,
+        basRelief: false,
+        reliefBeta: 0.85,
+        reliefTauPct: 0.95,
+        reliefWallGamma: 0,
+        reliefAlphaFactor: 0.1,
         supersample: false,
         edgeFalloffMm: 0,
         aoStrength: 0.5,

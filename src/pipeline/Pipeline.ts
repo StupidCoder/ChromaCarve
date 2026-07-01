@@ -6,6 +6,7 @@ import { getImageAsset } from '../assets/assetStore';
 import { ModelDepthPass } from '../obj/ModelDepthPass';
 import { resolveModel } from '../obj/modelSource';
 import { sampleProfile } from '../spline/profile';
+import { basRelief } from '../relief/basRelief';
 import {
   BG_COLOR_FS,
   BLUR_FS,
@@ -23,6 +24,11 @@ import {
 const PROFILE_LUT = 256; // resolution of the border profile lookup texture
 
 const TILE_TEX = 1024; // resolution of the single-tile height map
+
+// Cap the bas-relief Poisson solve to this dimension for interactive previews
+// (the solve is a CPU readback + spectral solve; full resolution is reserved for
+// export). Relief is low-frequency, so upsampling the capped result looks close.
+const RELIEF_MAX_SOLVE_DIM = 1024;
 
 // Pass raw image bytes / target values through without automatic sRGB
 // conversion so the previewed/exported values are predictable (WYSIWYG).
@@ -55,6 +61,68 @@ function makeTarget(w: number, h: number, depthBuffer = false): THREE.WebGLRende
     magFilter: THREE.NearestFilter,
     depthBuffer,
   });
+}
+
+/** Area-average downsample of a single-channel field to sw*sh (relief solve cap). */
+function boxDownsample(
+  src: Float32Array,
+  w: number,
+  h: number,
+  sw: number,
+  sh: number,
+): Float32Array {
+  const out = new Float32Array(sw * sh);
+  for (let y = 0; y < sh; y++) {
+    const y0 = Math.floor((y * h) / sh);
+    const y1 = Math.max(y0 + 1, Math.floor(((y + 1) * h) / sh));
+    for (let x = 0; x < sw; x++) {
+      const x0 = Math.floor((x * w) / sw);
+      const x1 = Math.max(x0 + 1, Math.floor(((x + 1) * w) / sw));
+      let sum = 0;
+      let count = 0;
+      for (let yy = y0; yy < y1; yy++) {
+        for (let xx = x0; xx < x1; xx++) {
+          sum += src[yy * w + xx];
+          count++;
+        }
+      }
+      out[y * sw + x] = count > 0 ? sum / count : 0;
+    }
+  }
+  return out;
+}
+
+/** Bilinear upsample of a single-channel field from sw*sh back to w*h. */
+function bilinearUpsample(
+  src: Float32Array,
+  sw: number,
+  sh: number,
+  w: number,
+  h: number,
+): Float32Array {
+  const out = new Float32Array(w * h);
+  const sx = sw > 1 ? (sw - 1) / Math.max(1, w - 1) : 0;
+  const sy = sh > 1 ? (sh - 1) / Math.max(1, h - 1) : 0;
+  for (let y = 0; y < h; y++) {
+    const fy = y * sy;
+    const y0 = Math.floor(fy);
+    const y1 = Math.min(sh - 1, y0 + 1);
+    const ty = fy - y0;
+    for (let x = 0; x < w; x++) {
+      const fx = x * sx;
+      const x0 = Math.floor(fx);
+      const x1 = Math.min(sw - 1, x0 + 1);
+      const tx = fx - x0;
+      const a = src[y0 * sw + x0];
+      const b = src[y0 * sw + x1];
+      const c = src[y1 * sw + x0];
+      const d = src[y1 * sw + x1];
+      const top = a + (b - a) * tx;
+      const bot = c + (d - c) * tx;
+      out[y * w + x] = top + (bot - top) * ty;
+    }
+  }
+  return out;
 }
 
 /** Result of a pipeline render: composite color + depth targets and preview scale. */
@@ -94,6 +162,8 @@ export class Pipeline {
   };
 
   private modelPass = new ModelDepthPass();
+  /** CPU-uploaded processed height for bas-relief; blitted into `reliefDepth`. */
+  private reliefTex: THREE.DataTexture | null = null;
   /** Lazily-sized, linear-filtered, depth-buffered targets for supersampling. */
   private ssTargets: Record<string, THREE.WebGLRenderTarget> = {};
   /** Square target holding the single-tile height map for background tiling. */
@@ -236,6 +306,21 @@ export class Pipeline {
     }
     // Model depth passes need a real depth buffer so the top surface wins.
     this.targets.modelDepth = makeTarget(w, h, true);
+    // Processed bas-relief height (R) + coverage (G), same float format.
+    this.targets.reliefDepth = makeTarget(w, h);
+
+    // (Re)allocate the CPU-upload texture that carries the relief result back to
+    // the GPU. Float + Nearest to match makeTarget so no quantization sneaks in.
+    this.reliefTex?.dispose();
+    this.reliefTex = new THREE.DataTexture(
+      new Float32Array(w * h * 4),
+      w,
+      h,
+      THREE.RGBAFormat,
+      THREE.FloatType,
+    );
+    this.reliefTex.minFilter = THREE.NearestFilter;
+    this.reliefTex.magFilter = THREE.NearestFilter;
   }
 
   private pass(material: THREE.Material, target: THREE.WebGLRenderTarget) {
@@ -321,8 +406,12 @@ export class Pipeline {
     this.renderer.setRenderTarget(null);
   }
 
-  /** Run the full pipeline for the given project. */
-  render(project: Project): CompositeResult {
+  /**
+   * Run the full pipeline for the given project. When `opts.reliefFullRes` is
+   * set (exports), the bas-relief solve runs at native resolution; otherwise it
+   * is capped for interactive previews.
+   */
+  render(project: Project, opts: { reliefFullRes?: boolean } = {}): CompositeResult {
     const res = outputResolution(project.output);
     this.ensureSize(res.width, res.height);
     const t = this.targets;
@@ -428,9 +517,28 @@ export class Pipeline {
         foreground.model.offsetXmm / output.widthMm,
         foreground.model.offsetYmm / output.heightMm,
       );
+
+      // Bas-relief: replace the raw height field with gradient-domain relief
+      // (dissolves silhouette cliffs, compresses form, keeps detail). Both the
+      // color/AO and the depth stages then consume the processed height. When
+      // off, the raw path below is unchanged.
+      let heightTarget = t.modelDepth;
+      let reliefRange: { min: number; max: number } | undefined;
+      if (foreground.model.basRelief) {
+        reliefRange = this.applyBasRelief(
+          t.modelDepth,
+          foreground.model,
+          t.reliefDepth,
+          res.width,
+          res.height,
+          !!opts.reliefFullRes,
+        );
+        heightTarget = t.reliefDepth;
+      }
+
       this.renderModelColor(
         foreground.model,
-        t.modelDepth,
+        heightTarget,
         false,
         t.fgColor,
         output.widthMm,
@@ -439,12 +547,13 @@ export class Pipeline {
 
       this.finalizeModelDepth(
         foreground.model,
-        t.modelDepth,
-        t.modelDepth,
+        heightTarget,
+        heightTarget,
         res.width,
         res.height,
         t.fgDepth,
         output.widthMm,
+        reliefRange,
       );
     } else {
       // Disabled / no model: clear the foreground layer (mask 0).
@@ -629,6 +738,74 @@ export class Pipeline {
     this.pass(mc, out);
   }
 
+  /**
+   * Read back the raw model height field, run the gradient-domain bas-relief
+   * solve on the CPU, and blit the processed height (R) + original coverage (G)
+   * into `dest`. Returns the stretch range to feed finalizeModelDepth (so it
+   * skips its own readback). For previews the solve is capped and upsampled;
+   * exports pass `fullRes` to solve at native resolution.
+   */
+  private applyBasRelief(
+    src: THREE.WebGLRenderTarget,
+    model: ModelSettings,
+    dest: THREE.WebGLRenderTarget,
+    w: number,
+    h: number,
+    fullRes: boolean,
+  ): { min: number; max: number } {
+    const buf = this.readFloat(src); // RGBA float, w*h*4, bottom-up rows
+    const n = w * h;
+    const height = new Float32Array(n);
+    const mask = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      height[i] = buf[i * 4];
+      mask[i] = buf[i * 4 + 1];
+    }
+
+    const params = {
+      beta: model.reliefBeta,
+      tauPercentile: model.reliefTauPct,
+      wallGamma: model.reliefWallGamma,
+      alphaFactor: model.reliefAlphaFactor,
+    };
+
+    // Cap the solve grid for previews; relief is low-frequency so the upsampled
+    // result closely matches the full-resolution solve.
+    let sw = w;
+    let sh = h;
+    let solveHeight: Float32Array = height;
+    let solveMask: Float32Array = mask;
+    const downscale = !fullRes && Math.max(w, h) > RELIEF_MAX_SOLVE_DIM;
+    if (downscale) {
+      const s = RELIEF_MAX_SOLVE_DIM / Math.max(w, h);
+      sw = Math.max(1, Math.round(w * s));
+      sh = Math.max(1, Math.round(h * s));
+      solveHeight = boxDownsample(height, w, h, sw, sh);
+      solveMask = boxDownsample(mask, w, h, sw, sh);
+    }
+
+    const result = basRelief(solveHeight, solveMask, sw, sh, params);
+    const reliefFull = downscale ? bilinearUpsample(result.data, sw, sh, w, h) : result.data;
+
+    // Repack into the CPU-upload texture: R = relief height, G = original mask.
+    const data = this.reliefTex!.image.data as unknown as Float32Array;
+    for (let i = 0; i < n; i++) {
+      data[i * 4] = reliefFull[i];
+      data[i * 4 + 1] = mask[i];
+      data[i * 4 + 2] = 0;
+      data[i * 4 + 3] = 1;
+    }
+    this.reliefTex!.needsUpdate = true;
+
+    // Blit into dest via the sigma-0 passthrough (full RGBA copy).
+    const blur = this.mats.blur;
+    blur.uniforms.uSigma.value = 0;
+    blur.uniforms.uTex.value = this.reliefTex;
+    this.pass(blur, dest);
+
+    return model.normalizeDepth ? { min: result.min, max: result.max } : { min: 0, max: 1 };
+  }
+
   private finalizeModelDepth(
     model: ModelSettings,
     height: THREE.WebGLRenderTarget,
@@ -637,6 +814,7 @@ export class Pipeline {
     rangeH: number,
     out: THREE.WebGLRenderTarget,
     widthMm: number,
+    precomputedRange?: { min: number; max: number },
   ) {
     const minDim = Math.min(this.width, this.height);
     const md = this.mats.modelDepth;
@@ -657,9 +835,11 @@ export class Pipeline {
       featherTex = this.targets.featherBlur.texture;
     }
 
-    const range = model.normalizeDepth
-      ? this.computeRange(rangeSrc, rangeW, rangeH, 0.01)
-      : { min: 0, max: 1 };
+    // Bas-relief supplies its range from the CPU solve (measured on the
+    // processed field), avoiding a second GPU readback here.
+    const range =
+      precomputedRange ??
+      (model.normalizeDepth ? this.computeRange(rangeSrc, rangeW, rangeH, 0.01) : { min: 0, max: 1 });
     md.uniforms.uModel.value = height.texture;
     md.uniforms.uBlur.value = blurTex;
     md.uniforms.uFeather.value = featherTex;

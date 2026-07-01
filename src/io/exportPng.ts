@@ -19,7 +19,7 @@ function download(data: Uint8Array, filename: string, type = 'image/png') {
  */
 export function exportDepthPng(project: Project, filename = 'depth.png') {
   const pipeline = getPipeline();
-  const result = pipeline.render(project);
+  const result = pipeline.render(project, { reliefFullRes: true });
   const { width, height } = pipeline.size;
   const buf = pipeline.readFloat(result.depth);
 
@@ -46,7 +46,7 @@ export function exportDepthPng(project: Project, filename = 'depth.png') {
 /** Export the composite color as an 8-bit RGBA PNG. */
 export function exportColorPng(project: Project, filename = 'color.png') {
   const pipeline = getPipeline();
-  const result = pipeline.render(project);
+  const result = pipeline.render(project, { reliefFullRes: true });
   const { width, height } = pipeline.size;
   const buf = pipeline.readFloat(result.color);
 
