@@ -83,9 +83,10 @@ function fillUniformDefs(): Record<string, THREE.IUniform> {
     // Volumetric-wood params (used when uFillType === 1).
     uWoodDepthScale: { value: 0.5 },
     uWoodMode: { value: 0 },
-    uWoodRingDensity: { value: 6 },
-    uWoodWarpCoarse: { value: new THREE.Vector2(0.35, 0.5) },
-    uWoodWarpFine: { value: new THREE.Vector2(2.5, 0.15) },
+    uWoodRingDensity: { value: 4.6 },
+    uWoodPithDepth: { value: 1.6 },
+    uWoodWarpCoarse: { value: new THREE.Vector2(0.16, 0.6) },
+    uWoodWarpFine: { value: new THREE.Vector2(0.55, 0.12) },
     uWoodContrast: { value: 0.5 },
     uWoodColorMid: { value: new THREE.Color() },
     uWoodTint: { value: 0.15 },
@@ -369,6 +370,7 @@ export class Pipeline {
     u.uWoodDepthScale.value = w.depthScale;
     u.uWoodMode.value = w.mode === 'rings' ? 1 : 0;
     u.uWoodRingDensity.value = w.ringDensity;
+    u.uWoodPithDepth.value = w.pithDepth;
     (u.uWoodWarpCoarse.value as THREE.Vector2).set(w.warpCoarseFreq, w.warpCoarseAmp);
     (u.uWoodWarpFine.value as THREE.Vector2).set(w.warpFineFreq, w.warpFineAmp);
     u.uWoodContrast.value = w.contrast;

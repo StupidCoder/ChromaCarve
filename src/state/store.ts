@@ -37,27 +37,29 @@ export function defaultMicroRelief(mode: 'add' | 'subtract' = 'subtract'): Micro
 export interface WoodParams {
   /** Z (depth) scale relative to XY — the master "how sliced" knob. */
   depthScale: number;
-  /** Flat-sawn plank bands (default) vs concentric end-grain rings. */
+  /** Flat-sawn (pith line, cathedral figure) vs concentric end-grain rings. */
   mode: WoodMode;
-  /** Band/ring frequency multiplier (rings per grain feature). */
+  /** Growth rings per grain feature (radial ring frequency). */
   ringDensity: number;
-  /** Large-scale domain warp (overall figure/flow). */
+  /** Board depth from the pith; small = tight cathedral flame, large = straight grain. */
+  pithDepth: number;
+  /** Pith-axis wander (overall figure/flow): frequency + amplitude. */
   warpCoarseFreq: number;
   warpCoarseAmp: number;
-  /** Fine domain warp (local fiber wobble). */
+  /** Radial grain turbulence (organic ring waviness): frequency + amplitude. */
   warpFineFreq: number;
   warpFineAmp: number;
-  /** Latewood line sharpness (0 = soft, 1 = thin/dark lines). */
+  /** Latewood line sharpness (0 = thick/soft, 1 = thin/crisp lines). */
   contrast: number;
-  /** Middle wood color stop (earlywood -> mid -> latewood). */
+  /** Middle wood color stop (mid heart tone; earlywood -> mid -> latewood). */
   colorMid: string;
-  /** Low-frequency large-scale tint variation strength. */
+  /** Large-scale heart colour-zoning strength. */
   tintStrength: number;
   /** High-frequency pore/fiber detail strength. */
   poreStrength: number;
-  /** Faint long axial streak strength. */
+  /** Bright figure/sap streak strength. */
   streakStrength: number;
-  /** Sparse ray-fleck (figure) strength. */
+  /** Per-ring darkness variation (0 = uniform lines, 1 = strongly mixed). */
   fleckStrength: number;
   /** Color saturation multiplier (<1 reins in for CMYK-ish printing). */
   saturation: number;
@@ -71,17 +73,18 @@ export function defaultWoodParams(): WoodParams {
   return {
     depthScale: 0.5,
     mode: 'bands',
-    ringDensity: 6,
-    warpCoarseFreq: 0.35,
-    warpCoarseAmp: 0.5,
-    warpFineFreq: 2.5,
-    warpFineAmp: 0.15,
-    contrast: 0.5,
-    colorMid: '#4a3420',
+    ringDensity: 4.6,
+    pithDepth: 1.6,
+    warpCoarseFreq: 0.16,
+    warpCoarseAmp: 0.6,
+    warpFineFreq: 0.55,
+    warpFineAmp: 0.12,
+    contrast: 0.6,
+    colorMid: '#6a492b',
     tintStrength: 0.15,
-    poreStrength: 0.15,
-    streakStrength: 0.1,
-    fleckStrength: 0,
+    poreStrength: 0.13,
+    streakStrength: 0.4,
+    fleckStrength: 0.5,
     saturation: 0.9,
     seed: 1,
     microRelief: defaultMicroRelief('subtract'),
@@ -208,26 +211,32 @@ export function solidFill(color: string): Fill {
 export const WOOD_PRESETS: Record<string, () => Fill> = {
   walnut: () => ({
     type: 'wood',
-    color1: '#6b4a30',
-    color2: '#241509',
+    color1: '#8f6640', // earlywood (light heart)
+    color2: '#2f1d10', // latewood line (dark)
     scaleMm: 26,
     turbulence: 0.6,
     angle: 0,
     wood: {
       ...defaultWoodParams(),
-      colorMid: '#43290f',
+      colorMid: '#6a492b',
       depthScale: 0.6,
-      ringDensity: 5,
+      ringDensity: 4.6,
+      pithDepth: 1.9,
+      warpCoarseFreq: 0.16,
       warpCoarseAmp: 0.55,
-      contrast: 0.55,
-      tintStrength: 0.2,
-      poreStrength: 0.18,
+      warpFineFreq: 0.55,
+      warpFineAmp: 0.12,
+      contrast: 0.6,
+      tintStrength: 0.35,
+      poreStrength: 0.13,
+      streakStrength: 0.9,
+      fleckStrength: 0.6,
     },
   }),
   oak: () => ({
     type: 'wood',
-    color1: '#c9a97a',
-    color2: '#6f4f2a',
+    color1: '#cdb083', // earlywood (light tan)
+    color2: '#6f4f2a', // latewood line
     scaleMm: 34,
     turbulence: 0.4,
     angle: 0,
@@ -235,20 +244,23 @@ export const WOOD_PRESETS: Record<string, () => Fill> = {
       ...defaultWoodParams(),
       colorMid: '#a8814f',
       depthScale: 0.4,
-      ringDensity: 8,
-      warpCoarseAmp: 0.3,
-      warpFineAmp: 0.1,
-      contrast: 0.45,
-      tintStrength: 0.12,
-      poreStrength: 0.3,
-      streakStrength: 0.18,
-      fleckStrength: 0.2,
+      ringDensity: 4.0,
+      pithDepth: 1.3, // shallower pith -> stronger cathedral flames
+      warpCoarseFreq: 0.18,
+      warpCoarseAmp: 0.7,
+      warpFineFreq: 0.5,
+      warpFineAmp: 0.12,
+      contrast: 0.5,
+      tintStrength: 0.2,
+      poreStrength: 0.35, // open, ring-porous
+      streakStrength: 0.3,
+      fleckStrength: 0.55,
     },
   }),
   olive: () => ({
     type: 'wood',
     color1: '#cbb78c',
-    color2: '#4f3a1e',
+    color2: '#3a2a14',
     scaleMm: 20,
     turbulence: 0.9,
     angle: 0,
@@ -256,15 +268,17 @@ export const WOOD_PRESETS: Record<string, () => Fill> = {
       ...defaultWoodParams(),
       colorMid: '#8a6a38',
       depthScale: 1.2,
-      ringDensity: 4,
-      warpCoarseFreq: 0.5,
-      warpCoarseAmp: 1.1,
-      warpFineFreq: 3,
-      warpFineAmp: 0.25,
-      contrast: 0.65,
-      tintStrength: 0.3,
+      ringDensity: 4.5,
+      pithDepth: 1.05, // shallow -> wild swirling flame (but not closed loops)
+      warpCoarseFreq: 0.35,
+      warpCoarseAmp: 1.0,
+      warpFineFreq: 0.8,
+      warpFineAmp: 0.2,
+      contrast: 0.62,
+      tintStrength: 0.4, // strong colour variation
       poreStrength: 0.12,
-      fleckStrength: 0.15,
+      streakStrength: 0.35,
+      fleckStrength: 0.6,
     },
   }),
 };

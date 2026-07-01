@@ -181,68 +181,110 @@ vec3 rampN(vec3 stops[MAX_STOPS], int count, float t) {
 `;
 
 /**
- * Volumetric wood material, layered like a procedural node graph:
- *   block coords -> domain warp -> growth-ring bands -> line sharpening ->
- *   3-stop color -> large-scale tint -> pore/streak/fleck detail.
+ * Volumetric wood material. Real grain is the intersection of the board face
+ * with the tree's concentric growth-ring *cylinders*, so the core coordinate is
+ * the RADIAL DISTANCE to a (wandering) pith axis — not parallel bands. Cathedral
+ * arches, flame tips and the tight/wide bunching of the grain all fall out of
+ * that distance function for free (Ebert/Perlin solid-texture wood; see the
+ * "Procedural wood textures" literature). Layered like a node graph:
+ *   block coords -> pith distance (+turbulence) -> thin latewood lines ->
+ *   per-ring variation -> heart colour zoning + figure streak -> pores/fibre.
  * The Z of the sample point comes from the depth map, so raised/recessed relief
- * slices through different layers of the block (cathedral arches, grain shifts).
+ * slices through different layers of the block.
  */
 export const GLSL_WOOD = /* glsl */ `
 uniform float uWoodDepthScale; // Z (depth) scale relative to XY — master "slice" knob
-uniform float uWoodMode;       // 0 bands (flat-sawn), 1 rings (end-grain)
+uniform float uWoodMode;       // 0 flat-sawn (pith line), 1 end-grain (concentric)
 uniform float uWoodRingDensity;
-uniform vec2 uWoodWarpCoarse;  // (freq, amp) large-scale figure
-uniform vec2 uWoodWarpFine;    // (freq, amp) fine fiber wobble
-uniform float uWoodContrast;   // latewood line sharpness
-uniform vec3 uWoodColorMid;    // middle color stop
-uniform float uWoodTint;       // large-scale tint variation
+uniform float uWoodPithDepth;  // board depth from pith; small => tight cathedral flame
+uniform vec2 uWoodWarpCoarse;  // pith wander (freq, amp) — overall figure/flow
+uniform vec2 uWoodWarpFine;    // radial grain turbulence (freq, amp)
+uniform float uWoodContrast;   // latewood line sharpness (thin<->thick)
+uniform vec3 uWoodColorMid;    // middle color stop (mid heart tone)
+uniform float uWoodTint;       // large-scale heart colour zoning strength
 uniform float uWoodPore;
-uniform float uWoodStreak;
-uniform float uWoodFleck;
+uniform float uWoodStreak;     // bright figure/sap streak strength
+uniform float uWoodFleck;      // per-ring darkness variation
 uniform float uWoodSaturation;
 uniform vec3 uWoodSeed;        // deterministic offset into the noise field
 
-// Sample point in grain units, and its coarse+fine warp — both from the shared
-// core so wood and stone build the volumetric point the same way.
+float woodHash(float n) { return fract(sin(n * 127.1) * 43758.5453); }
+float sfbm3(vec3 p, int o) { return (fbm3(p, o) - 0.5) * 2.0; }
+
+// Thin, seam-continuous latewood line: 1 at the ring boundary, 0 at ring centre,
+// identical on both sides of the fract() seam so there is no bright/dark jump.
+float woodRingLine(float g, float width) {
+  float ph = fract(g);
+  float d = min(ph, 1.0 - ph) * 2.0;
+  return 1.0 - smoothstep(0.0, width, d);
+}
+
+// Sample point in grain units (x = along grain, y = across, z = depth slice).
 vec3 woodBlockCoord(vec2 pMm, float z) {
   return buildP(pMm, z, uFillScale, uFillAngle, uWoodSeed, uWoodDepthScale);
 }
-vec3 woodWarp(vec3 q) {
-  return domainWarp(q, uWoodWarpCoarse, uWoodWarpFine, uFillTurb);
+
+// Radial distance from the (wandering) pith axis -> concentric growth rings.
+// Flat-sawn: pith is a line along the grain (x) at depth uWoodPithDepth, drifting
+// in lateral position and depth so the board flows between straight grain and
+// cathedral flame. End-grain: concentric rings around a wandering centre point.
+float woodRingCoord(vec3 q) {
+  vec2 wc = uWoodWarpCoarse;              // pith wander (freq, amp)
+  vec2 wf = uWoodWarpFine;                // grain turbulence (freq, amp)
+  float ta = wf.y * (0.5 + uFillTurb);    // turbulence amplitude (fill turb boosts it)
+  float turb = ta * sfbm3(vec3(q.x * wf.x, q.y * wf.x * 3.0, q.z) + 3.0, 4)
+             + 0.3 * ta * sfbm3(vec3(q.x * wf.x * 3.0, q.y * wf.x * 8.0, q.z) + 7.0, 4);
+  if (uWoodMode < 0.5) {
+    float pithY = wc.y * sfbm3(vec3(q.x * wc.x, 1.0, q.z) + 2.0, 4);
+    float depth = uWoodPithDepth + wc.y * 3.0 * sfbm3(vec3(q.x * wc.x * 0.8, 5.0, q.z) + 8.0, 3);
+    depth = max(depth, 0.25);
+    float dy = q.y - pithY;
+    return sqrt(dy * dy + depth * depth) + turb;
+  }
+  vec2 c = wc.y * vec2(sfbm3(vec3(q.x * wc.x, 1.0, q.z) + 2.0, 3),
+                       sfbm3(vec3(q.y * wc.x, 4.0, q.z) + 5.0, 3));
+  return length(q.xy - c) + turb;
 }
 
 // Growth-ring "tone": 0 = broad light earlywood, 1 = thin dark latewood line.
-float woodTone(vec3 w) {
-  float coord = (uWoodMode < 0.5) ? w.y : length(w.yz); // bands vs concentric rings
-  return ringTone(coord, uWoodRingDensity, uWoodContrast);
+float woodTone(vec3 q) {
+  float g = woodRingCoord(q) * uWoodRingDensity;
+  float width = mix(0.24, 0.06, uWoodContrast);
+  float strong = woodRingLine(g, width);
+  strong *= (1.0 - uWoodFleck) + uWoodFleck * woodHash(floor(g)); // some rings darker
+  float fineG = g * 3.3 + 0.5 * sfbm3(vec3(q.x * 0.8, q.y * 2.0, q.z) + 7.0, 3);
+  float fine = woodRingLine(fineG, width * 0.7) * 0.30;           // faint fine grain
+  return clamp(strong * 0.9 + fine, 0.0, 1.0);
 }
 
-// Sharpened latewood mask at a point — reused to emboss depth micro-grooves.
+// Latewood mask at a point — reused to emboss depth micro-grooves.
 float woodGrainLine(vec2 pMm, float z) {
-  return woodTone(woodWarp(woodBlockCoord(pMm, z)));
+  return woodTone(woodBlockCoord(pMm, z));
 }
 
 vec3 evalWood(vec2 pMm, float z) {
   vec3 q = woodBlockCoord(pMm, z);
-  vec3 w = woodWarp(q);
-  float tone = woodTone(w);
+  float tone = woodTone(q);
 
-  // 3-stop color ramp: earlywood (C1) -> mid -> latewood (C2).
-  vec3 col = tone < 0.5
-    ? mix(uFillC1, uWoodColorMid, tone * 2.0)
-    : mix(uWoodColorMid, uFillC2, tone * 2.0 - 1.0);
+  // Large-scale heart colour zoning (earlywood C1 <-> mid), amplitude = uWoodTint.
+  float zone = fbm3(vec3(q.x * 0.35, q.y * 0.55, q.z) + 20.0, 4);
+  float zoneMix = clamp(smoothstep(0.30, 0.72, zone) * uWoodTint * 2.5, 0.0, 1.0);
+  vec3 base = mix(uFillC1, uWoodColorMid, zoneMix);
+  // Bright figure/sap streak: pale bands elongated along the grain.
+  float streak = fbm3(vec3(q.x * 0.14, q.y * 0.85, q.z) + 60.0, 3);
+  vec3 pale = clamp(uFillC1 * 1.18, 0.0, 1.0);
+  base = mix(base, pale, smoothstep(0.52, 0.82, streak) * uWoodStreak);
+  // Latewood lines pull toward the dark stop.
+  vec3 col = mix(base, uFillC2, tone * 0.85);
 
-  // Large-scale tint so the board isn't uniform.
-  col *= 1.0 + uWoodTint * (fbm3(q * 0.15, 3) - 0.5);
-  // Pores: fine specks stretched along the grain (X) — open-pore look (oak).
-  float pn = fbm3(vec3(w.x * 1.5, w.y * 16.0, q.z * 16.0), 3);
-  col *= 1.0 - uWoodPore * smoothstep(0.55, 0.85, pn);
-  // Streaks: faint long axial darkening along the grain.
-  float sn = fbm3(vec3(q.x * 0.4, q.y * 3.0, q.z), 3);
-  col *= 1.0 - uWoodStreak * smoothstep(0.55, 0.8, sn);
-  // Ray flecks: sparse short bright figure across the grain.
-  float fn = snoise(vec3(q.x * 5.0, q.y * 1.2, q.z * 3.0 + 20.0));
-  col = mix(col, col * 1.35, uWoodFleck * smoothstep(0.65, 0.85, fn));
+  // High-frequency pores concentrated in the earlywood (1 - tone), stretched
+  // hard along the grain — the dense fine texture between the growth lines.
+  float pore = fbm3(vec3(q.x * 2.2, q.y * 75.0, q.z * 32.0), 3);
+  col *= 1.0 - uWoodPore * smoothstep(0.52, 0.78, pore) * (1.0 - 0.6 * tone);
+  // Fine fibre value noise (breaks up uniform bands).
+  col *= 1.0 + 0.06 * sfbm3(vec3(q.x * 1.2, q.y * 26.0, q.z * 8.0), 3);
+  // Chatoyance / large-scale luster.
+  col *= 1.0 + 0.04 * sfbm3(vec3(q.x * 0.25, q.y * 5.0, q.z) + 40.0, 3);
 
   // Rein in saturation for a printable (CMYK-ish) gamut, then clamp.
   float lum = dot(col, vec3(0.299, 0.587, 0.114));

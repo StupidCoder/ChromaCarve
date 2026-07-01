@@ -407,8 +407,16 @@ function WoodEditor({ fill, onChange }: { fill: Fill; onChange: (fill: Fill) => 
         value={wood.ringDensity}
         min={0.5}
         max={20}
-        step={0.5}
+        step={0.1}
         onChange={(v) => setWood({ ringDensity: v })}
+      />
+      <Slider
+        label="Pith depth (flame)"
+        value={wood.pithDepth}
+        min={0.2}
+        max={5}
+        step={0.1}
+        onChange={(v) => setWood({ pithDepth: v })}
       />
       <Slider
         label="Line sharpness"
@@ -421,15 +429,15 @@ function WoodEditor({ fill, onChange }: { fill: Fill; onChange: (fill: Fill) => 
 
       <div className="row">
         <Slider
-          label="Warp (coarse) freq"
+          label="Pith wander freq"
           value={wood.warpCoarseFreq}
           min={0}
-          max={2}
-          step={0.05}
+          max={1}
+          step={0.02}
           onChange={(v) => setWood({ warpCoarseFreq: v })}
         />
         <Slider
-          label="Warp (coarse) amp"
+          label="Pith wander amp"
           value={wood.warpCoarseAmp}
           min={0}
           max={2}
@@ -439,24 +447,24 @@ function WoodEditor({ fill, onChange }: { fill: Fill; onChange: (fill: Fill) => 
       </div>
       <div className="row">
         <Slider
-          label="Warp (fine) freq"
+          label="Grain turbulence freq"
           value={wood.warpFineFreq}
           min={0}
-          max={6}
-          step={0.1}
+          max={2}
+          step={0.05}
           onChange={(v) => setWood({ warpFineFreq: v })}
         />
         <Slider
-          label="Warp (fine) amp"
+          label="Grain turbulence amp"
           value={wood.warpFineAmp}
           min={0}
-          max={1}
-          step={0.02}
+          max={0.5}
+          step={0.01}
           onChange={(v) => setWood({ warpFineAmp: v })}
         />
       </div>
       <Slider
-        label="Turbulence"
+        label="Turbulence (boost)"
         value={fill.turbulence}
         min={0}
         max={2}
@@ -465,7 +473,7 @@ function WoodEditor({ fill, onChange }: { fill: Fill; onChange: (fill: Fill) => 
       />
 
       <Slider
-        label="Tint variation"
+        label="Colour zoning"
         value={wood.tintStrength}
         min={0}
         max={1}
@@ -481,7 +489,7 @@ function WoodEditor({ fill, onChange }: { fill: Fill; onChange: (fill: Fill) => 
         onChange={(v) => setWood({ poreStrength: v })}
       />
       <Slider
-        label="Streaks"
+        label="Figure streak"
         value={wood.streakStrength}
         min={0}
         max={1}
@@ -489,7 +497,7 @@ function WoodEditor({ fill, onChange }: { fill: Fill; onChange: (fill: Fill) => 
         onChange={(v) => setWood({ streakStrength: v })}
       />
       <Slider
-        label="Ray flecks"
+        label="Ring variation"
         value={wood.fleckStrength}
         min={0}
         max={1}
