@@ -1,5 +1,17 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import type { Fill, FillType } from '../state/store';
+import {
+  defaultStoneParams,
+  defaultWoodParams,
+  STONE_PRESETS,
+  WOOD_PRESETS,
+  type Fill,
+  type FillType,
+  type MicroRelief,
+  type StoneParams,
+  type StoneType,
+  type WoodMode,
+  type WoodParams,
+} from '../state/store';
 
 export function Panel({
   title,
@@ -214,6 +226,451 @@ export function FileInput({
   );
 }
 
+/** Depth micro-relief toggle + amount (+ optional proud/recessed mode). */
+function MicroReliefEditor({
+  label,
+  micro,
+  onChange,
+  lockMode,
+}: {
+  label: string;
+  micro: MicroRelief;
+  onChange: (m: MicroRelief) => void;
+  lockMode?: boolean;
+}) {
+  return (
+    <>
+      <Toggle label={label} checked={micro.enabled} onChange={(v) => onChange({ ...micro, enabled: v })} />
+      {micro.enabled && (
+        <>
+          <Slider
+            label="Micro-relief amount"
+            value={micro.amount}
+            min={0}
+            max={0.25}
+            step={0.005}
+            onChange={(v) => onChange({ ...micro, amount: v })}
+          />
+          {!lockMode && (
+            <Select
+              label="Micro-relief mode"
+              value={micro.mode}
+              options={[
+                { value: 'add', label: 'Proud (raised)' },
+                { value: 'subtract', label: 'Recessed (grooves)' },
+              ]}
+              onChange={(m) => onChange({ ...micro, mode: m as 'add' | 'subtract' })}
+            />
+          )}
+        </>
+      )}
+    </>
+  );
+}
+
+/** Editable list of color stops (add / remove / recolor). */
+function ColorList({
+  label,
+  colors,
+  onChange,
+  min = 1,
+  max = 6,
+}: {
+  label: string;
+  colors: string[];
+  onChange: (colors: string[]) => void;
+  min?: number;
+  max?: number;
+}) {
+  return (
+    <div className="field">
+      <div className="field__label">
+        <span>{label}</span>
+        <span className="field__value">
+          {colors.length > min && (
+            <button type="button" onClick={() => onChange(colors.slice(0, -1))}>
+              −
+            </button>
+          )}
+          {colors.length < max && (
+            <button
+              type="button"
+              onClick={() => onChange([...colors, colors[colors.length - 1] ?? '#888888'])}
+            >
+              +
+            </button>
+          )}
+        </span>
+      </div>
+      <div className="row">
+        {colors.map((c, i) => (
+          <input
+            key={i}
+            type="color"
+            value={c}
+            onChange={(e) => onChange(colors.map((x, j) => (j === i ? e.target.value : x)))}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Controls for the volumetric ("carved from a solid block") wood material. Grain
+ * scale/orientation and the two outer color stops live on `Fill`; everything
+ * wood-specific lives on `Fill.wood`. See the tuning note: `Depth scale` is the
+ * master knob for how "sliced" the grain looks over relief.
+ */
+function WoodEditor({ fill, onChange }: { fill: Fill; onChange: (fill: Fill) => void }) {
+  const wood = fill.wood ?? defaultWoodParams();
+  const setFill = (patch: Partial<Fill>) => onChange({ ...fill, ...patch });
+  const setWood = (patch: Partial<WoodParams>) => onChange({ ...fill, wood: { ...wood, ...patch } });
+  return (
+    <>
+      <Select
+        label="Preset"
+        value={'custom'}
+        options={[
+          { value: 'custom', label: 'Custom…' },
+          { value: 'walnut', label: 'Walnut' },
+          { value: 'oak', label: 'Oak' },
+          { value: 'olive', label: 'Olive (figured)' },
+        ]}
+        onChange={(k) => {
+          if (k !== 'custom') onChange(WOOD_PRESETS[k]());
+        }}
+      />
+      <ColorField label="Earlywood (light)" value={fill.color1} onChange={(c) => setFill({ color1: c })} />
+      <ColorField label="Mid tone" value={wood.colorMid} onChange={(c) => setWood({ colorMid: c })} />
+      <ColorField label="Latewood (dark)" value={fill.color2} onChange={(c) => setFill({ color2: c })} />
+
+      <Slider
+        label="Depth scale (slicing)"
+        value={wood.depthScale}
+        min={0}
+        max={3}
+        step={0.05}
+        onChange={(v) => setWood({ depthScale: v })}
+      />
+      <NumberField
+        label="Grain scale (mm)"
+        value={fill.scaleMm}
+        min={0.5}
+        step={1}
+        onChange={(v) => setFill({ scaleMm: v })}
+      />
+      <Slider
+        label="Grain angle"
+        value={fill.angle}
+        min={0}
+        max={180}
+        step={1}
+        format={(v) => `${Math.round(v)}°`}
+        onChange={(v) => setFill({ angle: v })}
+      />
+      <Select
+        label="Grain layout"
+        value={wood.mode}
+        options={[
+          { value: 'bands', label: 'Bands (flat-sawn)' },
+          { value: 'rings', label: 'Rings (end-grain)' },
+        ]}
+        onChange={(m) => setWood({ mode: m as WoodMode })}
+      />
+      <Slider
+        label="Ring density"
+        value={wood.ringDensity}
+        min={0.5}
+        max={20}
+        step={0.5}
+        onChange={(v) => setWood({ ringDensity: v })}
+      />
+      <Slider
+        label="Line sharpness"
+        value={wood.contrast}
+        min={0}
+        max={1}
+        step={0.05}
+        onChange={(v) => setWood({ contrast: v })}
+      />
+
+      <div className="row">
+        <Slider
+          label="Warp (coarse) freq"
+          value={wood.warpCoarseFreq}
+          min={0}
+          max={2}
+          step={0.05}
+          onChange={(v) => setWood({ warpCoarseFreq: v })}
+        />
+        <Slider
+          label="Warp (coarse) amp"
+          value={wood.warpCoarseAmp}
+          min={0}
+          max={2}
+          step={0.05}
+          onChange={(v) => setWood({ warpCoarseAmp: v })}
+        />
+      </div>
+      <div className="row">
+        <Slider
+          label="Warp (fine) freq"
+          value={wood.warpFineFreq}
+          min={0}
+          max={6}
+          step={0.1}
+          onChange={(v) => setWood({ warpFineFreq: v })}
+        />
+        <Slider
+          label="Warp (fine) amp"
+          value={wood.warpFineAmp}
+          min={0}
+          max={1}
+          step={0.02}
+          onChange={(v) => setWood({ warpFineAmp: v })}
+        />
+      </div>
+      <Slider
+        label="Turbulence"
+        value={fill.turbulence}
+        min={0}
+        max={2}
+        step={0.05}
+        onChange={(v) => setFill({ turbulence: v })}
+      />
+
+      <Slider
+        label="Tint variation"
+        value={wood.tintStrength}
+        min={0}
+        max={1}
+        step={0.02}
+        onChange={(v) => setWood({ tintStrength: v })}
+      />
+      <Slider
+        label="Pores"
+        value={wood.poreStrength}
+        min={0}
+        max={1}
+        step={0.02}
+        onChange={(v) => setWood({ poreStrength: v })}
+      />
+      <Slider
+        label="Streaks"
+        value={wood.streakStrength}
+        min={0}
+        max={1}
+        step={0.02}
+        onChange={(v) => setWood({ streakStrength: v })}
+      />
+      <Slider
+        label="Ray flecks"
+        value={wood.fleckStrength}
+        min={0}
+        max={1}
+        step={0.02}
+        onChange={(v) => setWood({ fleckStrength: v })}
+      />
+      <Slider
+        label="Saturation"
+        value={wood.saturation}
+        min={0}
+        max={1.2}
+        step={0.02}
+        onChange={(v) => setWood({ saturation: v })}
+      />
+      <NumberField
+        label="Seed"
+        value={wood.seed}
+        step={1}
+        onChange={(v) => setWood({ seed: v })}
+      />
+
+      <MicroReliefEditor
+        label="Emboss grain into depth (micro-relief)"
+        micro={wood.microRelief}
+        onChange={(m) => setWood({ microRelief: m })}
+        lockMode
+      />
+    </>
+  );
+}
+
+/**
+ * Controls for the volumetric stone material. Feature scale/orientation live on
+ * `Fill`; everything stone-specific on `Fill.stone`. Shared controls always show;
+ * color + family-specific groups switch on `stone.stoneType`.
+ */
+function StoneEditor({ fill, onChange }: { fill: Fill; onChange: (fill: Fill) => void }) {
+  const stone = fill.stone ?? defaultStoneParams();
+  const setFill = (patch: Partial<Fill>) => onChange({ ...fill, ...patch });
+  const setStone = (patch: Partial<StoneParams>) => onChange({ ...fill, stone: { ...stone, ...patch } });
+  const t = stone.stoneType;
+  const usesStrata = t === 'onyx' || t === 'sandstone' || t === 'travertine';
+  const usesVoronoi = t === 'granite' || t === 'terrazzo' || t === 'travertine' || t === 'cracked';
+  return (
+    <>
+      <Select
+        label="Preset"
+        value={'custom'}
+        options={[
+          { value: 'custom', label: 'Custom…' },
+          { value: 'carrara', label: 'Carrara marble' },
+          { value: 'calacatta', label: 'Calacatta marble' },
+          { value: 'neroMarquina', label: 'Nero Marquina' },
+          { value: 'verde', label: 'Verde (green)' },
+          { value: 'onyx', label: 'Onyx' },
+          { value: 'sandstone', label: 'Sandstone' },
+          { value: 'granite', label: 'Granite' },
+          { value: 'terrazzo', label: 'Terrazzo' },
+          { value: 'travertine', label: 'Travertine' },
+          { value: 'cracked', label: 'Cracked' },
+        ]}
+        onChange={(k) => {
+          if (k !== 'custom') onChange(STONE_PRESETS[k]());
+        }}
+      />
+      <Select
+        label="Stone type"
+        value={t}
+        options={[
+          { value: 'marble', label: 'Marble' },
+          { value: 'onyx', label: 'Onyx' },
+          { value: 'sandstone', label: 'Sandstone' },
+          { value: 'granite', label: 'Granite' },
+          { value: 'terrazzo', label: 'Terrazzo' },
+          { value: 'travertine', label: 'Travertine' },
+          { value: 'cracked', label: 'Cracked' },
+        ]}
+        onChange={(v) => setStone({ stoneType: v as StoneType })}
+      />
+
+      {/* Colors (per family) */}
+      {t === 'marble' && (
+        <>
+          <ColorField label="Matrix" value={stone.matrixColor} onChange={(c) => setStone({ matrixColor: c })} />
+          <ColorField label="Vein" value={stone.veinColor} onChange={(c) => setStone({ veinColor: c })} />
+          <Toggle label="Invert (light veins on dark)" checked={stone.invert} onChange={(v) => setStone({ invert: v })} />
+        </>
+      )}
+      {(t === 'granite' || t === 'cracked') && (
+        <ColorField
+          label={t === 'cracked' ? 'Crack color' : 'Accent mineral'}
+          value={stone.veinColor}
+          onChange={(c) => setStone({ veinColor: c })}
+        />
+      )}
+      {(t === 'granite' || t === 'terrazzo') && (
+        <ColorField label="Matrix" value={stone.matrixColor} onChange={(c) => setStone({ matrixColor: c })} />
+      )}
+      {t === 'terrazzo' ? (
+        <ColorList
+          label="Aggregate chips"
+          colors={stone.aggregatePalette}
+          onChange={(c) => setStone({ aggregatePalette: c })}
+        />
+      ) : (
+        t !== 'marble' && (
+          <ColorList label="Color stops" colors={stone.colorStops} onChange={(c) => setStone({ colorStops: c })} />
+        )
+      )}
+
+      {/* Shared placement / feel */}
+      <Slider
+        label="Depth scale (slicing)"
+        value={stone.depthScale}
+        min={0}
+        max={3}
+        step={0.05}
+        onChange={(v) => setStone({ depthScale: v })}
+      />
+      <NumberField label="Feature scale (mm)" value={fill.scaleMm} min={0.5} step={1} onChange={(v) => setFill({ scaleMm: v })} />
+      <Slider
+        label="Orientation"
+        value={fill.angle}
+        min={0}
+        max={180}
+        step={1}
+        format={(v) => `${Math.round(v)}°`}
+        onChange={(v) => setFill({ angle: v })}
+      />
+      <div className="row">
+        <Slider label="Warp (coarse) freq" value={stone.warpCoarseFreq} min={0} max={2} step={0.05} onChange={(v) => setStone({ warpCoarseFreq: v })} />
+        <Slider label="Warp (coarse) amp" value={stone.warpCoarseAmp} min={0} max={2} step={0.05} onChange={(v) => setStone({ warpCoarseAmp: v })} />
+      </div>
+      <div className="row">
+        <Slider label="Warp (fine) freq" value={stone.warpFineFreq} min={0} max={6} step={0.1} onChange={(v) => setStone({ warpFineFreq: v })} />
+        <Slider label="Warp (fine) amp" value={stone.warpFineAmp} min={0} max={1} step={0.02} onChange={(v) => setStone({ warpFineAmp: v })} />
+      </div>
+      <Slider label="Contrast" value={stone.contrast} min={0} max={1} step={0.05} onChange={(v) => setStone({ contrast: v })} />
+      <Slider label="Tint variation" value={stone.tintStrength} min={0} max={1} step={0.02} onChange={(v) => setStone({ tintStrength: v })} />
+      <Slider label="Saturation" value={stone.saturation} min={0} max={1.2} step={0.02} onChange={(v) => setStone({ saturation: v })} />
+
+      {/* Marble veins */}
+      {t === 'marble' && (
+        <>
+          <Slider label="Vein frequency" value={stone.veinFreqPrimary} min={0.2} max={8} step={0.1} onChange={(v) => setStone({ veinFreqPrimary: v })} />
+          <Slider label="Hairline vein freq" value={stone.veinFreqSecondary} min={0.5} max={20} step={0.5} onChange={(v) => setStone({ veinFreqSecondary: v })} />
+          <Slider label="Hairline strength" value={stone.secondaryVeinStrength} min={0} max={1} step={0.02} onChange={(v) => setStone({ secondaryVeinStrength: v })} />
+          <Slider label="Vein sharpness" value={stone.veinSharpness} min={0} max={1} step={0.02} onChange={(v) => setStone({ veinSharpness: v })} />
+          <div className="row">
+            <Slider label="Turbulence freq" value={stone.turbulenceFreq} min={0.1} max={4} step={0.1} onChange={(v) => setStone({ turbulenceFreq: v })} />
+            <Slider label="Turbulence amp" value={stone.turbulenceAmp} min={0} max={4} step={0.05} onChange={(v) => setStone({ turbulenceAmp: v })} />
+          </div>
+        </>
+      )}
+
+      {/* Voronoi (granite / terrazzo / travertine / cracked) */}
+      {usesVoronoi && (
+        <>
+          <Slider label={t === 'terrazzo' ? 'Chip size' : 'Cell scale'} value={stone.cellScale} min={1} max={40} step={0.5} onChange={(v) => setStone({ cellScale: v })} />
+          {t === 'granite' && (
+            <>
+              <div className="row">
+                <Slider label="Cell scale 2" value={stone.cellScale2} min={1} max={40} step={0.5} onChange={(v) => setStone({ cellScale2: v })} />
+                <Slider label="Cell scale 3" value={stone.cellScale3} min={1} max={60} step={0.5} onChange={(v) => setStone({ cellScale3: v })} />
+              </div>
+              <Slider label="Speckle intensity" value={stone.speckleIntensity} min={0} max={1} step={0.02} onChange={(v) => setStone({ speckleIntensity: v })} />
+            </>
+          )}
+          {(t === 'terrazzo' || t === 'cracked') && (
+            <Slider label={t === 'cracked' ? 'Crack width' : 'Matrix line width'} value={stone.edgeWidth} min={0.005} max={0.25} step={0.005} onChange={(v) => setStone({ edgeWidth: v })} />
+          )}
+          {t === 'cracked' && (
+            <Slider label="Crack intensity" value={stone.crackIntensity} min={0} max={1} step={0.02} onChange={(v) => setStone({ crackIntensity: v })} />
+          )}
+        </>
+      )}
+
+      {/* Sedimentary strata (onyx / sandstone / travertine) */}
+      {usesStrata && (
+        <>
+          <Slider label="Strata density" value={stone.strataDensity} min={0.5} max={12} step={0.5} onChange={(v) => setStone({ strataDensity: v })} />
+          <Slider label="Strata waviness" value={stone.strataWaviness} min={0} max={2} step={0.05} onChange={(v) => setStone({ strataWaviness: v })} />
+          <Select
+            label="Strata axis"
+            value={String(stone.strataAxis)}
+            options={[
+              { value: '0', label: 'Z (depth)' },
+              { value: '1', label: 'Y (vertical)' },
+              { value: '2', label: 'X (horizontal)' },
+            ]}
+            onChange={(a) => setStone({ strataAxis: Number(a) as 0 | 1 | 2 })}
+          />
+        </>
+      )}
+
+      <NumberField label="Seed" value={stone.seed} step={1} onChange={(v) => setStone({ seed: v })} />
+      <MicroReliefEditor
+        label="Emboss veins/voids into depth (micro-relief)"
+        micro={stone.microRelief}
+        onChange={(m) => setStone({ microRelief: m })}
+      />
+    </>
+  );
+}
+
 export function FillEditor({
   label,
   fill,
@@ -232,44 +689,21 @@ export function FillEditor({
         options={[
           { value: 'solid', label: 'Solid color' },
           { value: 'wood', label: 'Wood grain' },
-          { value: 'marble', label: 'Marble' },
-          { value: 'noise', label: 'Noise' },
+          { value: 'stone', label: 'Stone' },
         ]}
-        onChange={(t) => set({ type: t as FillType })}
+        onChange={(t) => {
+          // Populate the material params the first time this fill becomes wood/stone.
+          if (t === 'wood') onChange({ ...fill, type: 'wood', wood: fill.wood ?? defaultWoodParams() });
+          else if (t === 'stone') onChange({ ...fill, type: 'stone', stone: fill.stone ?? defaultStoneParams() });
+          else onChange({ ...fill, type: t as FillType });
+        }}
       />
-      <ColorField
-        label={fill.type === 'solid' ? 'Color' : 'Color 1'}
-        value={fill.color1}
-        onChange={(c) => set({ color1: c })}
-      />
-      {fill.type !== 'solid' && (
-        <>
-          <ColorField label="Color 2" value={fill.color2} onChange={(c) => set({ color2: c })} />
-          <NumberField
-            label="Scale (mm)"
-            value={fill.scaleMm}
-            min={0.5}
-            step={1}
-            onChange={(v) => set({ scaleMm: v })}
-          />
-          <Slider
-            label="Turbulence"
-            value={fill.turbulence}
-            min={0}
-            max={2}
-            step={0.05}
-            onChange={(v) => set({ turbulence: v })}
-          />
-          <Slider
-            label="Angle"
-            value={fill.angle}
-            min={0}
-            max={180}
-            step={1}
-            format={(v) => `${Math.round(v)}°`}
-            onChange={(v) => set({ angle: v })}
-          />
-        </>
+      {fill.type === 'wood' ? (
+        <WoodEditor fill={fill} onChange={onChange} />
+      ) : fill.type === 'stone' ? (
+        <StoneEditor fill={fill} onChange={onChange} />
+      ) : (
+        <ColorField label="Color" value={fill.color1} onChange={(c) => set({ color1: c })} />
       )}
     </>
   );

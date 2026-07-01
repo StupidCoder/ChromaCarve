@@ -1,7 +1,7 @@
 import { encode } from 'fast-png';
 import { getPipeline } from '../pipeline/Pipeline';
 import { updateReliefExport } from '../relief/reliefController';
-import type { Project } from '../state/store';
+import { outputResolution, type Project } from '../state/store';
 
 function download(data: Uint8Array, filename: string, type = 'image/png') {
   const blob = new Blob([data as BlobPart], { type });
@@ -14,12 +14,33 @@ function download(data: Uint8Array, filename: string, type = 'image/png') {
 }
 
 /**
+ * Cap the export resolution to the GPU's max texture size. Render targets larger
+ * than `MAX_TEXTURE_SIZE` can't be allocated, so we uniformly reduce density and
+ * warn the user. (Tiled render-and-stitch for arbitrarily large maps is not yet
+ * implemented; the procedural fills are mm-based so they'd tile seamlessly.)
+ */
+function clampToMaxTexture(project: Project): Project {
+  const { maxTextureSize } = getPipeline().renderer.capabilities;
+  const res = outputResolution(project.output);
+  const longest = Math.max(res.width, res.height);
+  if (longest <= maxTextureSize) return project;
+  const scale = maxTextureSize / longest;
+  alert(
+    `Export resolution ${res.width}×${res.height}px exceeds this GPU's limit ` +
+      `(${maxTextureSize}px). Capping to ~${Math.round(res.width * scale)}×` +
+      `${Math.round(res.height * scale)}px. Tiled rendering for larger maps is not yet implemented.`,
+  );
+  return { ...project, output: { ...project.output, pixelsPerMm: project.output.pixelsPerMm * scale } };
+}
+
+/**
  * Export the composite depth as a 16-bit grayscale PNG. The used depth range is
  * normalized to span the full 0..65535 for maximum carving/printing resolution;
  * the PNG carries no physical scale (the user sets that in their CAM/slicer).
  */
 export async function exportDepthPng(project: Project, filename = 'depth.png') {
   const pipeline = getPipeline();
+  project = clampToMaxTexture(project);
   await updateReliefExport(project); // full-resolution relief solve (worker) first
   const result = pipeline.render(project);
   const { width, height } = pipeline.size;
@@ -48,6 +69,7 @@ export async function exportDepthPng(project: Project, filename = 'depth.png') {
 /** Export the composite color as an 8-bit RGBA PNG. */
 export async function exportColorPng(project: Project, filename = 'color.png') {
   const pipeline = getPipeline();
+  project = clampToMaxTexture(project);
   await updateReliefExport(project); // full-resolution relief solve (worker) first
   const result = pipeline.render(project);
   const { width, height } = pipeline.size;
