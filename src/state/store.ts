@@ -246,7 +246,7 @@ export function defaultProject(): Project {
         normalizeDepth: true,
         detail: 0,
         gamma: 1,
-        basRelief: false,
+        basRelief: true,
         reliefBeta: 0.5,
         reliefAlphaFactor: 0.18,
         reliefEmergeMm: 1.5,

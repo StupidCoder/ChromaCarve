@@ -464,10 +464,14 @@ export function ForegroundPanel() {
         step={0.05}
         onChange={(v) => update((p) => void (p.foreground.model.gamma = v))}
       />
-      <Toggle
-        label="Bas-relief (dissolve cliffs)"
-        checked={fg.model.basRelief}
-        onChange={(v) => update((p) => void (p.foreground.model.basRelief = v))}
+      <Select
+        label="Geometry mode"
+        value={fg.model.basRelief ? 'relief' : 'raw'}
+        options={[
+          { value: 'relief', label: 'Bas-relief' },
+          { value: 'raw', label: 'Raw geometry' },
+        ]}
+        onChange={(v) => update((p) => void (p.foreground.model.basRelief = v === 'relief'))}
       />
       {fg.model.basRelief && (
         <>
@@ -501,13 +505,15 @@ export function ForegroundPanel() {
         checked={fg.model.supersample}
         onChange={(v) => update((p) => void (p.foreground.model.supersample = v))}
       />
-      <NumberField
-        label="Edge falloff (mm)"
-        value={fg.model.edgeFalloffMm}
-        min={0}
-        step={0.5}
-        onChange={(v) => update((p) => void (p.foreground.model.edgeFalloffMm = v))}
-      />
+      {!fg.model.basRelief && (
+        <NumberField
+          label="Edge falloff (mm)"
+          value={fg.model.edgeFalloffMm}
+          min={0}
+          step={0.5}
+          onChange={(v) => update((p) => void (p.foreground.model.edgeFalloffMm = v))}
+        />
+      )}
       <Slider
         label="AO shading"
         value={fg.model.aoStrength}
