@@ -257,7 +257,7 @@ export function ForegroundTab() {
           value={m.basRelief ? 'relief' : 'raw'}
           options={[
             { value: 'relief', label: 'Bas-relief' },
-            { value: 'raw', label: 'Raw geometry' },
+            { value: 'raw', label: 'Pure depth' },
           ]}
           onChange={(v) => setModel((d) => void (d.basRelief = v === 'relief'))}
         />

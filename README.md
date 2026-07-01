@@ -4,9 +4,10 @@
 
 # ChromaCarve
 
-A browser tool for compositing a **color map** + a **depth/height map** for CNC relief
-carving (depth only) and full-color 3D printing (depth + color). The composite is built
-from three independently-optional parts and previewed in a lit, orbitable 3D view.
+A browser tool for compositing a **color map** + a matching **depth/height map** for
+CNC relief carving (depth only) and full-color 3D printing (depth + color). The
+composite is built from three independently-optional parts, textured with procedural
+materials, and previewed in a lit, orbitable 3D view — entirely client-side.
 
 ## Run
 
@@ -14,28 +15,77 @@ from three independently-optional parts and previewed in a lit, orbitable 3D vie
 npm install
 npm run dev      # http://localhost:5173
 npm run build    # type-check + production build
+npm test         # vitest unit tests
 ```
 
-## How it works
+## The three parts
 
-The "image" is composited from three parts, combined by **priority replace**
-(`foreground ?? border ?? background` per pixel):
+The image is composited from three parts, combined by **priority replace**
+(`foreground ?? frame ?? background` per pixel). Each is toggled on/off independently
+and has its own depth `min`/`max` (relative height units).
 
-- **Background** — either an uploaded **image** (Gaussian blur + brightness/contrast/
-  desaturation; depth is a flat constant) or an **OBJ model tiled** across the canvas at a
-  chosen interval, with overlaps taking the per-pixel **max** height (e.g. dragon scales).
-- **Border** — a Catmull-Rom **spline profile** applied to the edge band (drag points;
-  double-click to add, double-click a point to remove).
-- **Foreground** — an uploaded **OBJ model**, freely rotated; the depth map is the
-  orthographic projection from the angle you orbit to ("what you see is what you get").
+- **Foreground** — the main subject. Use an uploaded **OBJ** or a procedural primitive
+  (**torus, sphere, torus knot, cube**), freely oriented in an orbit gizmo. The depth map
+  is the **orthographic** projection from the angle you set — what you see in the gizmo is
+  what you get. Offset it in X/Y within the canvas.
+- **Frame** — a border band whose cross-section is a Catmull-Rom **spline profile** (drag
+  points; double-click empty space to add a point, double-click a point to remove it),
+  with its own width and fill.
+- **Background** — an uploaded **image** (Gaussian blur + brightness/contrast/desaturation;
+  flat constant depth), an **OBJ/primitive tiled** across the canvas at a chosen interval
+  (overlaps take the per-pixel **max** height, e.g. dragon scales), or a **solid color**.
 
-Each part has its own depth `min`/`max` (relative height units). Output size is physical
-(mm + px/mm). The 3D preview's `previewMaxDepthMm` only scales the on-screen relief.
+Output size is physical (mm + px/mm).
 
-### Export
+## Materials
+
+Every part is textured with a **Fill**, evaluated procedurally in canvas space:
+
+- **Solid color.**
+- **Wood grain** — a volumetric model where grain lines are slices through concentric
+  growth-ring cylinders around a wandering pith axis, giving realistic cathedral flames,
+  irregular ring spacing, thin latewood lines, high-frequency pores and heart-colour
+  zoning. Species presets: **Walnut, Oak, Mahogany, Redwood, Poplar, Olive**. Knobs cover
+  ring density, pith depth/wander, grain turbulence, line sharpness, colour zoning, pores,
+  figure streak, per-ring variation and saturation, plus flat-sawn vs end-grain layout.
+- **Stone** — volumetric **marble, onyx, sandstone, granite, terrazzo, travertine** and
+  **cracked** stone (veins, strata, Voronoi aggregates/cracks), with curated presets.
+
+Wood and stone are sampled in 3D, so their veins/rings carve correctly through raised and
+recessed relief. A 🎲 button randomizes the material seed. **Micro-relief** can emboss a
+material's feature lines (wood grooves, marble veins, travertine voids) into the depth map.
+
+## Depth & relief
+
+The foreground offers two **geometry modes**:
+
+- **Bas-relief** — gradient-domain relief (Fattal et al. 2002 / Weyrich et al. 2007):
+  dissolves silhouette cliffs and compresses large gradients while preserving fine detail,
+  controlled by compression (β), detail level (α) and edge emergence.
+- **Pure depth** — the raw orthographic height field, with an edge-falloff option to
+  feather vertical silhouette cliffs.
+
+Shared depth controls: maximize/normalize the range, detail (unsharp mask), a depth curve
+(γ), and 2× supersampling for cleaner edges. **Shading** can bake ambient occlusion and
+fine curvature (concave/convex) shading into the colour map.
+
+## 3D preview
+
+The full-viewport preview displaces a high-res plane by the depth map, shaded in-shader
+with a specular highlight and a key light:
+
+- **Drag** to orbit (constrained to the front hemisphere so you can't swing behind the
+  relief), **scroll** to zoom, **right-drag** to pan.
+- Toggle **Rotate light source** to sweep the light or hold it in place.
+- In the foreground orbit gizmo (an orthographic view matching the exported maps), the
+  **scroll wheel** drives the model zoom and a **Roll** slider rotates about the view axis.
+
+`previewMaxDepthMm` and preview px/mm only affect the on-screen preview, not the export.
+
+## Export
 
 - **Depth PNG** — 16-bit grayscale, normalized so the used range spans full black→white
-  (max resolution; the PNG carries no physical scale — set that in your CAM/slicer).
+  (the PNG carries no physical scale — set that in your CAM/slicer).
 - **Color PNG** — 8-bit RGBA.
 - **Settings JSON** — all parameters (binary assets are referenced by filename; re-upload
   them after importing).
@@ -44,10 +94,11 @@ Each part has its own depth `min`/`max` (relative height units). Output size is 
 
 - `src/state/store.ts` — Zustand project model (= the JSON export schema).
 - `src/pipeline/` — offscreen Three.js render-target pipeline: per-part color/depth/mask
-  stages + the priority-replace compositor, all on float targets.
+  stages + the priority-replace compositor, all on float targets. `shaders.ts` holds the
+  shared procedural core and the wood/stone material shaders.
 - `src/obj/ModelDepthPass.ts` — orthographic model→height-map renderer (shared by the
-  foreground and the background tile).
-- `src/spline/profile.ts` — Catmull-Rom profile sampling for the border LUT.
-- `src/three/Viewer3D.tsx` — displacement mesh, in-shader normals, orbiting point light +
-  specular.
+  foreground, the background tile and the orbit gizmo).
+- `src/relief/` — gradient-domain bas-relief solver (Poisson/DCT), run in a worker.
+- `src/spline/profile.ts` — Catmull-Rom profile sampling for the frame LUT.
+- `src/three/Viewer3D.tsx` — displacement mesh, in-shader normals, key light + specular.
 - `src/io/` — PNG (`fast-png`) and project-JSON export/import.
