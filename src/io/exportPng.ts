@@ -1,5 +1,6 @@
 import { encode } from 'fast-png';
 import { getPipeline } from '../pipeline/Pipeline';
+import { updateReliefExport } from '../relief/reliefController';
 import type { Project } from '../state/store';
 
 function download(data: Uint8Array, filename: string, type = 'image/png') {
@@ -17,9 +18,10 @@ function download(data: Uint8Array, filename: string, type = 'image/png') {
  * normalized to span the full 0..65535 for maximum carving/printing resolution;
  * the PNG carries no physical scale (the user sets that in their CAM/slicer).
  */
-export function exportDepthPng(project: Project, filename = 'depth.png') {
+export async function exportDepthPng(project: Project, filename = 'depth.png') {
   const pipeline = getPipeline();
-  const result = pipeline.render(project, { reliefFullRes: true });
+  await updateReliefExport(project); // full-resolution relief solve (worker) first
+  const result = pipeline.render(project);
   const { width, height } = pipeline.size;
   const buf = pipeline.readFloat(result.depth);
 
@@ -44,9 +46,10 @@ export function exportDepthPng(project: Project, filename = 'depth.png') {
 }
 
 /** Export the composite color as an 8-bit RGBA PNG. */
-export function exportColorPng(project: Project, filename = 'color.png') {
+export async function exportColorPng(project: Project, filename = 'color.png') {
   const pipeline = getPipeline();
-  const result = pipeline.render(project, { reliefFullRes: true });
+  await updateReliefExport(project); // full-resolution relief solve (worker) first
+  const result = pipeline.render(project);
   const { width, height } = pipeline.size;
   const buf = pipeline.readFloat(result.color);
 

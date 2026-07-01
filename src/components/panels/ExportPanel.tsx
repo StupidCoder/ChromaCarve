@@ -8,10 +8,18 @@ export function ExportPanel() {
 
   return (
     <Panel title="Export / Import">
-      <button onClick={() => exportDepthPng(useProjectStore.getState().project)}>
+      <button
+        onClick={() =>
+          exportDepthPng(useProjectStore.getState().project).catch((e) => alert(String(e)))
+        }
+      >
         Download depth PNG (16-bit)
       </button>
-      <button onClick={() => exportColorPng(useProjectStore.getState().project)}>
+      <button
+        onClick={() =>
+          exportColorPng(useProjectStore.getState().project).catch((e) => alert(String(e)))
+        }
+      >
         Download color PNG
       </button>
       <button onClick={() => exportProjectJson(useProjectStore.getState().project)}>

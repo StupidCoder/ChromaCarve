@@ -213,3 +213,47 @@ button:hover {
 .muted {
   color: var(--text-dim);
 }
+
+.progress-overlay {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 50;
+  pointer-events: none;
+}
+
+.progress-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  min-width: 280px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
+}
+
+.progress-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 12px;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.progress-meta {
+  color: var(--text-dim);
+}
+
+.progress-track {
+  height: 6px;
+  background: var(--bg);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.15s ease;
+}

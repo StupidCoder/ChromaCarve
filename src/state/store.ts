@@ -270,12 +270,20 @@ interface ProjectStore {
    * `project` so it is never serialized; the preview includes it in its deps.
    */
   assetVersion: number;
+  /**
+   * Bumped when the async bas-relief worker finishes and the pipeline's cached
+   * relief is updated; the previews include it in their deps so they re-render
+   * with the fresh relief.
+   */
+  reliefVersion: number;
   /** Apply a mutation to a draft of the project (immer-free shallow clone). */
   update: (mutator: (draft: Project) => void) => void;
   /** Replace the whole project (used by JSON import / reset). */
   setProject: (project: Project) => void;
   /** Signal that an asset was loaded so dependents recompute. */
   bumpAssets: () => void;
+  /** Signal that a fresh relief was uploaded so the previews re-render. */
+  bumpRelief: () => void;
   reset: () => void;
 }
 
@@ -286,6 +294,7 @@ function clone<T>(value: T): T {
 export const useProjectStore = create<ProjectStore>((set) => ({
   project: defaultProject(),
   assetVersion: 0,
+  reliefVersion: 0,
   update: (mutator) =>
     set((state) => {
       const draft = clone(state.project);
@@ -294,6 +303,7 @@ export const useProjectStore = create<ProjectStore>((set) => ({
     }),
   setProject: (project) => set({ project: clone(project) }),
   bumpAssets: () => set((state) => ({ assetVersion: state.assetVersion + 1 })),
+  bumpRelief: () => set((state) => ({ reliefVersion: state.reliefVersion + 1 })),
   reset: () => set({ project: defaultProject() }),
 }));
 

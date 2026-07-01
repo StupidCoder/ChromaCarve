@@ -31,6 +31,7 @@ function makeDataTexture(w: number, h: number, data: Float32Array) {
 export function Viewer3D({ size = 320 }: { size?: number }) {
   const project = useProjectStore((s) => s.project);
   const assetVersion = useProjectStore((s) => s.assetVersion);
+  const reliefVersion = useProjectStore((s) => s.reliefVersion);
   const mountRef = useRef<HTMLDivElement>(null);
 
   const engine = useRef<{
@@ -161,7 +162,7 @@ export function Viewer3D({ size = 320 }: { size?: number }) {
     // Normals are sampled at the mesh vertex spacing (1/seg), not the texel size.
     u.uStepUv.value.set(1 / seg, 1 / seg);
     u.uStepWorld.value.set(pw / seg, ph / seg);
-  }, [project, assetVersion]);
+  }, [project, assetVersion, reliefVersion]);
 
   return (
     <div

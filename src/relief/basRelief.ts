@@ -121,7 +121,13 @@ function edgeDistance(cov: Uint8Array, w: number, h: number): Float32Array {
  * on the background) with CG preconditioned by the DCT Neumann solver. `b` is the
  * negative divergence on covered pixels. Converges in a handful of DCT solves.
  */
-function solveDirichlet(b: Float64Array, cov: Uint8Array, w: number, h: number): Float64Array {
+function solveDirichlet(
+  b: Float64Array,
+  cov: Uint8Array,
+  w: number,
+  h: number,
+  onProgress?: (frac: number) => void,
+): Float64Array {
   const n = w * h;
   const applyA = (v: Float64Array, out: Float64Array) => {
     for (let y = 0; y < h; y++)
@@ -162,6 +168,7 @@ function solveDirichlet(b: Float64Array, cov: Uint8Array, w: number, h: number):
   let rz = 0;
   for (let i = 0; i < n; i++) rz += r[i] * z[i];
   for (let it = 0; it < PCG_MAX_ITERS; it++) {
+    if (onProgress) onProgress(it / PCG_MAX_ITERS);
     applyA(p, Ap);
     let pAp = 0;
     for (let i = 0; i < n; i++) pAp += p[i] * Ap[i];
@@ -193,6 +200,7 @@ export function basRelief(
   w: number,
   h: number,
   params: BasReliefParams,
+  onProgress?: (frac: number) => void,
 ): BasReliefResult {
   const n = w * h;
   const { beta, alphaFactor, emergeFrac } = params;
@@ -249,7 +257,7 @@ export function basRelief(
   }
 
   // --- 6. Dirichlet Poisson solve (background = 0). ---
-  const u = solveDirichlet(b, cov, w, h);
+  const u = solveDirichlet(b, cov, w, h, onProgress);
 
   // --- 7. Edge-fade envelope: smoothly ramp to 0 at the silhouette. ---
   const emergePx = Math.max(1, emergeFrac * Math.min(w, h));

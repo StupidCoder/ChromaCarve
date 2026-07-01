@@ -6,7 +6,9 @@ import { getImageAsset } from '../assets/assetStore';
 import { ModelDepthPass } from '../obj/ModelDepthPass';
 import { resolveModel } from '../obj/modelSource';
 import { sampleProfile } from '../spline/profile';
-import { basRelief } from '../relief/basRelief';
+import type { BasReliefParams } from '../relief/basRelief';
+import type { ReliefInputs } from '../relief/reliefClient';
+import { RELIEF_PREVIEW_DIM, RELIEF_EXPORT_DIM } from '../relief/resample';
 import {
   BG_COLOR_FS,
   BLUR_FS,
@@ -24,19 +26,6 @@ import {
 const PROFILE_LUT = 256; // resolution of the border profile lookup texture
 
 const TILE_TEX = 1024; // resolution of the single-tile height map
-
-// The bas-relief Dirichlet solve runs the DCT-preconditioned CG on power-of-two
-// grids (fast radix-2 FFT; arbitrary sizes fall back to slow Bluestein). It is
-// capped smaller for interactive previews and larger for exports; relief is
-// low-frequency so the upsampled result closely matches full resolution.
-const RELIEF_PREVIEW_DIM = 512;
-const RELIEF_EXPORT_DIM = 2048;
-
-/** Largest useful power-of-two solve size for a dimension, capped. */
-function reliefSolveSize(dim: number, cap: number): number {
-  const p = Math.pow(2, Math.round(Math.log2(Math.max(1, dim))));
-  return Math.min(cap, p);
-}
 
 // Pass raw image bytes / target values through without automatic sRGB
 // conversion so the previewed/exported values are predictable (WYSIWYG).
@@ -69,81 +58,6 @@ function makeTarget(w: number, h: number, depthBuffer = false): THREE.WebGLRende
     magFilter: THREE.NearestFilter,
     depthBuffer,
   });
-}
-
-/** Area-average downsample of a single-channel field to sw*sh (relief solve cap). */
-function boxDownsample(
-  src: Float32Array,
-  w: number,
-  h: number,
-  sw: number,
-  sh: number,
-): Float32Array {
-  const out = new Float32Array(sw * sh);
-  for (let y = 0; y < sh; y++) {
-    const y0 = Math.floor((y * h) / sh);
-    const y1 = Math.max(y0 + 1, Math.floor(((y + 1) * h) / sh));
-    for (let x = 0; x < sw; x++) {
-      const x0 = Math.floor((x * w) / sw);
-      const x1 = Math.max(x0 + 1, Math.floor(((x + 1) * w) / sw));
-      let sum = 0;
-      let count = 0;
-      for (let yy = y0; yy < y1; yy++) {
-        for (let xx = x0; xx < x1; xx++) {
-          sum += src[yy * w + xx];
-          count++;
-        }
-      }
-      out[y * sw + x] = count > 0 ? sum / count : 0;
-    }
-  }
-  return out;
-}
-
-/** Bilinear upsample of a single-channel field from sw*sh back to w*h. */
-function bilinearUpsample(
-  src: Float32Array,
-  sw: number,
-  sh: number,
-  w: number,
-  h: number,
-): Float32Array {
-  const out = new Float32Array(w * h);
-  const sx = sw > 1 ? (sw - 1) / Math.max(1, w - 1) : 0;
-  const sy = sh > 1 ? (sh - 1) / Math.max(1, h - 1) : 0;
-  for (let y = 0; y < h; y++) {
-    const fy = y * sy;
-    const y0 = Math.floor(fy);
-    const y1 = Math.min(sh - 1, y0 + 1);
-    const ty = fy - y0;
-    for (let x = 0; x < w; x++) {
-      const fx = x * sx;
-      const x0 = Math.floor(fx);
-      const x1 = Math.min(sw - 1, x0 + 1);
-      const tx = fx - x0;
-      const a = src[y0 * sw + x0];
-      const b = src[y0 * sw + x1];
-      const c = src[y1 * sw + x0];
-      const d = src[y1 * sw + x1];
-      const top = a + (b - a) * tx;
-      const bot = c + (d - c) * tx;
-      out[y * w + x] = top + (bot - top) * ty;
-    }
-  }
-  return out;
-}
-
-/** Resample a single-channel field to sw*sh (box-average down, bilinear up). */
-function resampleField(
-  src: Float32Array,
-  w: number,
-  h: number,
-  sw: number,
-  sh: number,
-): Float32Array {
-  return sw <= w && sh <= h
-    ? boxDownsample(src, w, h, sw, sh)
-    : bilinearUpsample(src, w, h, sw, sh);
 }
 
 /** Result of a pipeline render: composite color + depth targets and preview scale. */
@@ -185,6 +99,10 @@ export class Pipeline {
   private modelPass = new ModelDepthPass();
   /** CPU-uploaded processed height for bas-relief; blitted into `reliefDepth`. */
   private reliefTex: THREE.DataTexture | null = null;
+  /** Whether `reliefDepth` holds a computed relief (else render falls back to raw). */
+  private hasRelief = false;
+  /** Stretch range of the current relief for finalizeModelDepth. */
+  private reliefRange: { min: number; max: number } = { min: 0, max: 1 };
   /** Lazily-sized, linear-filtered, depth-buffered targets for supersampling. */
   private ssTargets: Record<string, THREE.WebGLRenderTarget> = {};
   /** Square target holding the single-tile height map for background tiling. */
@@ -301,6 +219,8 @@ export class Pipeline {
     if (w === this.width && h === this.height) return;
     this.width = w;
     this.height = h;
+    // Resized targets: the cached relief no longer applies until re-solved.
+    this.hasRelief = false;
     this.renderer.setSize(w, h, false);
     for (const key of Object.keys(this.targets)) this.targets[key].dispose();
     this.targets = {};
@@ -428,11 +348,11 @@ export class Pipeline {
   }
 
   /**
-   * Run the full pipeline for the given project. When `opts.reliefFullRes` is
-   * set (exports), the bas-relief solve runs at native resolution; otherwise it
-   * is capped for interactive previews.
+   * Run the full pipeline for the given project. Synchronous: bas-relief uses
+   * the worker-computed relief currently cached in `reliefDepth` (see
+   * updateRelief), falling back to the raw height field until it is ready.
    */
-  render(project: Project, opts: { reliefFullRes?: boolean } = {}): CompositeResult {
+  render(project: Project): CompositeResult {
     const res = outputResolution(project.output);
     this.ensureSize(res.width, res.height);
     const t = this.targets;
@@ -539,23 +459,15 @@ export class Pipeline {
         foreground.model.offsetYmm / output.heightMm,
       );
 
-      // Bas-relief: replace the raw height field with gradient-domain relief
-      // (dissolves silhouette cliffs, compresses form, keeps detail). Both the
-      // color/AO and the depth stages then consume the processed height. When
-      // off, the raw path below is unchanged.
+      // Bas-relief: use the gradient-domain relief computed asynchronously in a
+      // worker (see updateRelief). render() is synchronous and consumes whatever
+      // relief is currently cached in `reliefDepth`; until the first solve
+      // completes (or after a resize) it falls back to the raw height field.
       let heightTarget = t.modelDepth;
       let reliefRange: { min: number; max: number } | undefined;
-      if (foreground.model.basRelief) {
-        reliefRange = this.applyBasRelief(
-          t.modelDepth,
-          foreground.model,
-          t.reliefDepth,
-          res.width,
-          res.height,
-          Math.min(output.widthMm, output.heightMm),
-          !!opts.reliefFullRes,
-        );
+      if (foreground.model.basRelief && this.hasRelief) {
         heightTarget = t.reliefDepth;
+        reliefRange = this.reliefRange;
       }
 
       this.renderModelColor(
@@ -761,23 +673,38 @@ export class Pipeline {
   }
 
   /**
-   * Read back the raw model height field, run the gradient-domain bas-relief
-   * solve on the CPU, and blit the processed height (R) + original coverage (G)
-   * into `dest`. Returns the stretch range to feed finalizeModelDepth (so it
-   * skips its own readback). For previews the solve is capped and upsampled;
-   * exports pass `fullRes` to solve at native resolution.
+   * Render the foreground model's raw height field and read it back as inputs for
+   * the worker relief solve (see reliefController). Returns null if bas-relief is
+   * off or there is no foreground model. `fullRes` selects the export solve cap.
    */
-  private applyBasRelief(
-    src: THREE.WebGLRenderTarget,
-    model: ModelSettings,
-    dest: THREE.WebGLRenderTarget,
-    w: number,
-    h: number,
-    minMm: number,
+  prepareReliefInputs(
+    project: Project,
     fullRes: boolean,
-  ): { min: number; max: number } {
-    const buf = this.readFloat(src); // RGBA float, w*h*4, bottom-up rows
+    assetVersion: number,
+  ): (ReliefInputs & { key: string; model: ModelSettings }) | null {
+    const { foreground, output } = project;
+    if (!foreground.enabled || !foreground.model.basRelief) return null;
+    const fgAsset = resolveModel(foreground.model);
+    if (!fgAsset) return null;
+
+    const res = outputResolution(output);
+    this.ensureSize(res.width, res.height);
+    const t = this.targets;
+    this.modelPass.setGeometry(fgAsset);
+    this.renderModelDepth(
+      'fg',
+      foreground.model,
+      fgAsset,
+      t.modelDepth,
+      new THREE.Quaternion(...foreground.model.rotationQuat),
+      foreground.model.offsetXmm / output.widthMm,
+      foreground.model.offsetYmm / output.heightMm,
+    );
+
+    const w = res.width;
+    const h = res.height;
     const n = w * h;
+    const buf = this.readFloat(t.modelDepth); // RGBA float, bottom-up rows
     const height = new Float32Array(n);
     const mask = new Float32Array(n);
     for (let i = 0; i < n; i++) {
@@ -785,43 +712,56 @@ export class Pipeline {
       mask[i] = buf[i * 4 + 1];
     }
 
-    const params = {
-      beta: model.reliefBeta,
-      alphaFactor: model.reliefAlphaFactor,
+    const m = foreground.model;
+    const minMm = Math.max(Math.min(output.widthMm, output.heightMm), 1e-3);
+    const params: BasReliefParams = {
+      beta: m.reliefBeta,
+      alphaFactor: m.reliefAlphaFactor,
       // Emergence fade (mm) as a fraction of the smaller physical dimension, so
       // it is resolution-independent across preview and export.
-      emergeFrac: model.reliefEmergeMm / Math.max(minMm, 1e-3),
+      emergeFrac: m.reliefEmergeMm / minMm,
     };
-
-    // Solve on a power-of-two grid (fast FFT) capped by preview/export budget;
-    // resample the height + mask in, and the relief out.
     const cap = fullRes ? RELIEF_EXPORT_DIM : RELIEF_PREVIEW_DIM;
-    const sw = reliefSolveSize(w, cap);
-    const sh = reliefSolveSize(h, cap);
-    const resample = sw !== w || sh !== h;
-    const solveHeight = resample ? resampleField(height, w, h, sw, sh) : height;
-    const solveMask = resample ? resampleField(mask, w, h, sw, sh) : mask;
+    // Key = everything that determines the relief; unrelated edits reuse the cache.
+    const key = JSON.stringify([
+      w, h, cap, assetVersion, m.source, m.assetRef,
+      m.procTube, m.procP, m.procQ, m.procSquash, m.procBoxW, m.procBoxD,
+      m.rotationQuat, m.scale, m.offsetXmm, m.offsetYmm, m.supersample,
+      params.beta, params.alphaFactor, params.emergeFrac, m.normalizeDepth,
+    ]);
+    return { height, mask, w, h, params, cap, key, model: m };
+  }
 
-    const result = basRelief(solveHeight, solveMask, sw, sh, params);
-    const reliefFull = resample ? bilinearUpsample(result.data, sw, sh, w, h) : result.data;
-
-    // Repack into the CPU-upload texture: R = relief height, G = original mask.
-    const data = this.reliefTex!.image.data as unknown as Float32Array;
+  /**
+   * Upload a worker-computed relief (R = height) + coverage (G = mask) into
+   * `reliefDepth` so subsequent synchronous renders use it. Dropped if the
+   * pipeline was resized while the solve ran.
+   */
+  uploadRelief(
+    data: Float32Array,
+    mask: Float32Array,
+    w: number,
+    h: number,
+    model: ModelSettings,
+    min: number,
+    max: number,
+  ): void {
+    if (w !== this.width || h !== this.height) return; // resolution changed under us
+    const tex = this.reliefTex!.image.data as unknown as Float32Array;
+    const n = w * h;
     for (let i = 0; i < n; i++) {
-      data[i * 4] = reliefFull[i];
-      data[i * 4 + 1] = mask[i];
-      data[i * 4 + 2] = 0;
-      data[i * 4 + 3] = 1;
+      tex[i * 4] = data[i];
+      tex[i * 4 + 1] = mask[i];
+      tex[i * 4 + 2] = 0;
+      tex[i * 4 + 3] = 1;
     }
     this.reliefTex!.needsUpdate = true;
-
-    // Blit into dest via the sigma-0 passthrough (full RGBA copy).
     const blur = this.mats.blur;
     blur.uniforms.uSigma.value = 0;
     blur.uniforms.uTex.value = this.reliefTex;
-    this.pass(blur, dest);
-
-    return model.normalizeDepth ? { min: result.min, max: result.max } : { min: 0, max: 1 };
+    this.pass(blur, this.targets.reliefDepth);
+    this.hasRelief = true;
+    this.reliefRange = model.normalizeDepth ? { min, max } : { min: 0, max: 1 };
   }
 
   private finalizeModelDepth(

@@ -44,6 +44,7 @@ function drawDepth(
 export function Preview2D() {
   const project = useProjectStore((s) => s.project);
   const assetVersion = useProjectStore((s) => s.assetVersion);
+  const reliefVersion = useProjectStore((s) => s.reliefVersion);
   const depthRef = useRef<HTMLCanvasElement>(null);
   const colorRef = useRef<HTMLCanvasElement>(null);
 
@@ -65,7 +66,7 @@ export function Preview2D() {
     if (depthCtx) drawDepth(depthCtx, depth, w, h, displayMax);
     const colorCtx = colorCanvas?.getContext('2d');
     if (colorCtx) drawColor(colorCtx, color, w, h);
-  }, [project, assetVersion]);
+  }, [project, assetVersion, reliefVersion]);
 
   return (
     <div className="previews">
