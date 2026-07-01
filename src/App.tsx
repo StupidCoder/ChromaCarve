@@ -1,16 +1,11 @@
 import { useEffect, useRef } from 'react';
-import { Preview2D } from './components/Preview2D';
-import { OutputPanel } from './components/panels/OutputPanel';
-import {
-  BackgroundPanel,
-  BorderPanel,
-  ForegroundPanel,
-} from './components/panels/PartPanels';
-import { ExportPanel } from './components/panels/ExportPanel';
+import { PreviewPanel } from './components/panels/PreviewPanel';
+import { SettingsPanel } from './components/panels/SettingsPanel';
 import { ProgressBar } from './components/ProgressBar';
 import { Splash } from './components/Splash';
 import { updateReliefPreview } from './relief/reliefController';
 import { useProjectStore } from './state/store';
+import { Viewer3D } from './three/Viewer3D';
 
 export default function App() {
   const project = useProjectStore((s) => s.project);
@@ -30,20 +25,13 @@ export default function App() {
 
   return (
     <div className="app">
-      <Splash />
-      <div className="pane pane--left">
-        <div className="app-title">ChromaCarve</div>
-        <OutputPanel />
-        <BackgroundPanel />
-        <BorderPanel />
-        <ForegroundPanel />
-        <ExportPanel />
+      <div className="stage">
+        <Viewer3D />
       </div>
-
-      <div className="pane pane--center">
-        <Preview2D />
-      </div>
+      <SettingsPanel />
+      <PreviewPanel />
       <ProgressBar />
+      <Splash />
     </div>
   );
 }

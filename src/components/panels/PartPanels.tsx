@@ -26,6 +26,8 @@ const MODEL_OPTIONS: { value: ModelSource; label: string }[] = [
   { value: 'cube', label: 'Cube' },
 ];
 
+type SetModel = (mut: (m: ModelSettings) => void) => void;
+
 /** Model source selector (OBJ upload or procedural primitive) + rotation gizmo. */
 function ModelSourcePicker({
   model,
@@ -33,7 +35,7 @@ function ModelSourcePicker({
   bumpAssets,
 }: {
   model: ModelSettings;
-  setModel: (mut: (m: ModelSettings) => void) => void;
+  setModel: SetModel;
   bumpAssets: () => void;
 }) {
   return (
@@ -129,56 +131,221 @@ function ModelSourcePicker({
 }
 
 /**
- * M0 placeholder panels: enable toggles + depth ranges only. Functional
- * controls (upload, blur, spline, rotation, tiling) are added in later
- * milestones.
+ * Shared AO + curvature ("Shading") controls used by the foreground model and
+ * the tiled background model — identical knobs on `ModelSettings`.
  */
+function ShadingSection({ model, setModel }: { model: ModelSettings; setModel: SetModel }) {
+  return (
+    <Panel title="Shading">
+      <Slider
+        label="AO shading"
+        value={model.aoStrength}
+        min={0}
+        max={1}
+        step={0.05}
+        onChange={(v) => setModel((m) => void (m.aoStrength = v))}
+      />
+      <NumberField
+        label="AO radius (mm)"
+        value={model.aoRadiusMm}
+        min={0.5}
+        step={0.5}
+        onChange={(v) => setModel((m) => void (m.aoRadiusMm = v))}
+      />
+      <Slider
+        label="Surface detail"
+        value={model.surfaceShade}
+        min={0}
+        max={1}
+        step={0.05}
+        onChange={(v) => setModel((m) => void (m.surfaceShade = v))}
+      />
+      <NumberField
+        label="Surface radius (mm)"
+        value={model.surfaceShadeRadiusMm}
+        min={0.2}
+        step={0.5}
+        onChange={(v) => setModel((m) => void (m.surfaceShadeRadiusMm = v))}
+      />
+    </Panel>
+  );
+}
 
-export function BackgroundPanel() {
+/** Enable/disable header row shown at the top of a part tab. */
+function EnableRow({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <div className="enable-row">
+      <Toggle label={label} checked={checked} onChange={onChange} />
+    </div>
+  );
+}
+
+export function ForegroundTab() {
+  const fg = useProjectStore((s) => s.project.foreground);
+  const update = useProjectStore((s) => s.update);
+  const bumpAssets = useProjectStore((s) => s.bumpAssets);
+  const setModel: SetModel = (mut) => update((p) => mut(p.foreground.model));
+  const m = fg.model;
+  return (
+    <div className="tab-body">
+      <EnableRow
+        label="Enable foreground"
+        checked={fg.enabled}
+        onChange={(v) => update((p) => void (p.foreground.enabled = v))}
+      />
+
+      <Panel title="Model">
+        <ModelSourcePicker model={m} setModel={setModel} bumpAssets={bumpAssets} />
+        <Slider
+          label="Scale"
+          value={m.scale}
+          min={0.1}
+          max={5}
+          step={0.05}
+          onChange={(v) => setModel((d) => void (d.scale = v))}
+        />
+        <div className="row">
+          <NumberField
+            label="Offset X (mm)"
+            value={m.offsetXmm}
+            step={1}
+            onChange={(v) => update((p) => void (p.foreground.model.offsetXmm = v))}
+          />
+          <NumberField
+            label="Offset Y (mm)"
+            value={m.offsetYmm}
+            step={1}
+            onChange={(v) => update((p) => void (p.foreground.model.offsetYmm = v))}
+          />
+        </div>
+        <Select
+          label="Geometry mode"
+          value={m.basRelief ? 'relief' : 'raw'}
+          options={[
+            { value: 'relief', label: 'Bas-relief' },
+            { value: 'raw', label: 'Raw geometry' },
+          ]}
+          onChange={(v) => setModel((d) => void (d.basRelief = v === 'relief'))}
+        />
+        {m.basRelief && (
+          <>
+            <Slider
+              label="Compression / detail (β)"
+              value={m.reliefBeta}
+              min={0.2}
+              max={0.95}
+              step={0.01}
+              onChange={(v) => setModel((d) => void (d.reliefBeta = v))}
+            />
+            <Slider
+              label="Detail level (α)"
+              value={m.reliefAlphaFactor}
+              min={0.05}
+              max={0.4}
+              step={0.01}
+              onChange={(v) => setModel((d) => void (d.reliefAlphaFactor = v))}
+            />
+            <NumberField
+              label="Edge emergence (mm)"
+              value={m.reliefEmergeMm}
+              min={0}
+              step={0.5}
+              onChange={(v) => setModel((d) => void (d.reliefEmergeMm = v))}
+            />
+          </>
+        )}
+      </Panel>
+
+      <Panel title="Depth">
+        <DepthRangeField
+          min={m.depth.min}
+          max={m.depth.max}
+          onChange={(r) => setModel((d) => void (d.depth = r))}
+        />
+        <Toggle
+          label="Maximize depth range"
+          checked={m.normalizeDepth}
+          onChange={(v) => setModel((d) => void (d.normalizeDepth = v))}
+        />
+        <Slider
+          label="Detail (unsharp)"
+          value={m.detail}
+          min={0}
+          max={1}
+          step={0.05}
+          onChange={(v) => setModel((d) => void (d.detail = v))}
+        />
+        <Slider
+          label="Depth curve (γ)"
+          value={m.gamma}
+          min={0.3}
+          max={3}
+          step={0.05}
+          onChange={(v) => setModel((d) => void (d.gamma = v))}
+        />
+        <Toggle
+          label="Supersample (2×)"
+          checked={m.supersample}
+          onChange={(v) => setModel((d) => void (d.supersample = v))}
+        />
+        {!m.basRelief && (
+          <NumberField
+            label="Edge falloff (mm)"
+            value={m.edgeFalloffMm}
+            min={0}
+            step={0.5}
+            onChange={(v) => setModel((d) => void (d.edgeFalloffMm = v))}
+          />
+        )}
+      </Panel>
+
+      <Panel title="Color">
+        <FillEditor
+          label="Fill"
+          fill={m.fill}
+          onChange={(f) => setModel((d) => void (d.fill = f))}
+        />
+      </Panel>
+
+      <ShadingSection model={m} setModel={setModel} />
+    </div>
+  );
+}
+
+export function BackgroundTab() {
   const bg = useProjectStore((s) => s.project.background);
   const update = useProjectStore((s) => s.update);
   const bumpAssets = useProjectStore((s) => s.bumpAssets);
+  const setModel: SetModel = (mut) => update((p) => mut(p.background.model));
 
   return (
-    <Panel
-      title="Background"
-      right={
-        <Toggle
-          label=""
-          checked={bg.enabled}
-          onChange={(v) => update((p) => void (p.background.enabled = v))}
-        />
-      }
-    >
-      <Select
-        label="Source"
-        value={bg.type}
-        options={[
-          { value: 'image', label: 'Image' },
-          { value: 'model', label: 'Model (tiled)' },
-          { value: 'solid', label: 'Solid color' },
-        ]}
-        onChange={(v) => update((p) => void (p.background.type = v))}
+    <div className="tab-body">
+      <EnableRow
+        label="Enable background"
+        checked={bg.enabled}
+        onChange={(v) => update((p) => void (p.background.enabled = v))}
       />
 
-      {bg.type === 'solid' && (
-        <>
-          <FillEditor
-            label="Fill"
-            fill={bg.solidFill}
-            onChange={(f) => update((p) => void (p.background.solidFill = f))}
-          />
-          <NumberField
-            label="Depth (constant)"
-            value={bg.solidDepth}
-            step={0.01}
-            onChange={(v) => update((p) => void (p.background.solidDepth = v))}
-          />
-        </>
-      )}
-
-      {bg.type === 'image' && (
-        <>
+      <Panel title="Model">
+        <Select
+          label="Source"
+          value={bg.type}
+          options={[
+            { value: 'image', label: 'Image' },
+            { value: 'model', label: 'Model (tiled)' },
+            { value: 'solid', label: 'Solid color' },
+          ]}
+          onChange={(v) => update((p) => void (p.background.type = v))}
+        />
+        {bg.type === 'image' && (
           <FileInput
             label="Image"
             accept="image/*"
@@ -191,36 +358,55 @@ export function BackgroundPanel() {
               })
             }
           />
-          <Slider
-            label="Blur (% of size)"
-            value={bg.image.blur}
-            min={0}
-            max={0.1}
-            step={0.002}
-            format={(v) => `${(v * 100).toFixed(1)}%`}
-            onChange={(v) => update((p) => void (p.background.image.blur = v))}
+        )}
+        {bg.type === 'model' && (
+          <>
+            <ModelSourcePicker model={bg.model} setModel={setModel} bumpAssets={bumpAssets} />
+            <Slider
+              label="Tile zoom"
+              value={bg.model.scale}
+              min={0.1}
+              max={5}
+              step={0.05}
+              onChange={(v) => setModel((d) => void (d.scale = v))}
+            />
+            <NumberField
+              label="Tile size (mm)"
+              value={bg.model.tileSizeMm}
+              min={0.5}
+              step={1}
+              onChange={(v) => update((p) => void (p.background.model.tileSizeMm = v))}
+            />
+            <div className="row">
+              <NumberField
+                label="Interval X (mm)"
+                value={bg.model.intervalXmm}
+                min={0.5}
+                step={1}
+                onChange={(v) => update((p) => void (p.background.model.intervalXmm = v))}
+              />
+              <NumberField
+                label="Interval Y (mm)"
+                value={bg.model.intervalYmm}
+                min={0.5}
+                step={1}
+                onChange={(v) => update((p) => void (p.background.model.intervalYmm = v))}
+              />
+            </div>
+          </>
+        )}
+      </Panel>
+
+      <Panel title="Depth">
+        {bg.type === 'solid' && (
+          <NumberField
+            label="Depth (constant)"
+            value={bg.solidDepth}
+            step={0.01}
+            onChange={(v) => update((p) => void (p.background.solidDepth = v))}
           />
-          <Slider
-            label="Brightness"
-            value={bg.image.brightness}
-            min={-1}
-            max={1}
-            onChange={(v) => update((p) => void (p.background.image.brightness = v))}
-          />
-          <Slider
-            label="Contrast"
-            value={bg.image.contrast}
-            min={-1}
-            max={1}
-            onChange={(v) => update((p) => void (p.background.image.contrast = v))}
-          />
-          <Slider
-            label="Desaturation"
-            value={bg.image.desaturation}
-            min={0}
-            max={1}
-            onChange={(v) => update((p) => void (p.background.image.desaturation = v))}
-          />
+        )}
+        {bg.type === 'image' && (
           <NumberField
             label="Depth (constant)"
             value={bg.image.depth.min}
@@ -229,140 +415,117 @@ export function BackgroundPanel() {
               update((p) => void (p.background.image.depth = { min: v, max: v }))
             }
           />
-        </>
-      )}
+        )}
+        {bg.type === 'model' && (
+          <>
+            <DepthRangeField
+              min={bg.model.depth.min}
+              max={bg.model.depth.max}
+              onChange={(r) => setModel((d) => void (d.depth = r))}
+            />
+            <Toggle
+              label="Maximize depth range"
+              checked={bg.model.normalizeDepth}
+              onChange={(v) => setModel((d) => void (d.normalizeDepth = v))}
+            />
+            <Slider
+              label="Detail (unsharp)"
+              value={bg.model.detail}
+              min={0}
+              max={1}
+              step={0.05}
+              onChange={(v) => setModel((d) => void (d.detail = v))}
+            />
+            <Slider
+              label="Depth curve (γ)"
+              value={bg.model.gamma}
+              min={0.3}
+              max={3}
+              step={0.05}
+              onChange={(v) => setModel((d) => void (d.gamma = v))}
+            />
+            <Toggle
+              label="Supersample (2×)"
+              checked={bg.model.supersample}
+              onChange={(v) => setModel((d) => void (d.supersample = v))}
+            />
+            <NumberField
+              label="Edge falloff (mm)"
+              value={bg.model.edgeFalloffMm}
+              min={0}
+              step={0.5}
+              onChange={(v) => setModel((d) => void (d.edgeFalloffMm = v))}
+            />
+          </>
+        )}
+      </Panel>
 
-      {bg.type === 'model' && (
-        <>
-          <ModelSourcePicker
-            model={bg.model}
-            setModel={(mut) => update((p) => mut(p.background.model))}
-            bumpAssets={bumpAssets}
+      <Panel title="Color">
+        {bg.type === 'solid' && (
+          <FillEditor
+            label="Fill"
+            fill={bg.solidFill}
+            onChange={(f) => update((p) => void (p.background.solidFill = f))}
           />
-          <Slider
-            label="Tile zoom"
-            value={bg.model.scale}
-            min={0.1}
-            max={5}
-            step={0.05}
-            onChange={(v) => update((p) => void (p.background.model.scale = v))}
-          />
-          <NumberField
-            label="Tile size (mm)"
-            value={bg.model.tileSizeMm}
-            min={0.5}
-            step={1}
-            onChange={(v) => update((p) => void (p.background.model.tileSizeMm = v))}
-          />
-          <div className="row">
-            <NumberField
-              label="Interval X (mm)"
-              value={bg.model.intervalXmm}
-              min={0.5}
-              step={1}
-              onChange={(v) => update((p) => void (p.background.model.intervalXmm = v))}
+        )}
+        {bg.type === 'image' && (
+          <>
+            <Slider
+              label="Blur (% of size)"
+              value={bg.image.blur}
+              min={0}
+              max={0.1}
+              step={0.002}
+              format={(v) => `${(v * 100).toFixed(1)}%`}
+              onChange={(v) => update((p) => void (p.background.image.blur = v))}
             />
-            <NumberField
-              label="Interval Y (mm)"
-              value={bg.model.intervalYmm}
-              min={0.5}
-              step={1}
-              onChange={(v) => update((p) => void (p.background.model.intervalYmm = v))}
+            <Slider
+              label="Brightness"
+              value={bg.image.brightness}
+              min={-1}
+              max={1}
+              onChange={(v) => update((p) => void (p.background.image.brightness = v))}
             />
-          </div>
+            <Slider
+              label="Contrast"
+              value={bg.image.contrast}
+              min={-1}
+              max={1}
+              onChange={(v) => update((p) => void (p.background.image.contrast = v))}
+            />
+            <Slider
+              label="Desaturation"
+              value={bg.image.desaturation}
+              min={0}
+              max={1}
+              onChange={(v) => update((p) => void (p.background.image.desaturation = v))}
+            />
+          </>
+        )}
+        {bg.type === 'model' && (
           <FillEditor
             label="Fill"
             fill={bg.model.fill}
-            onChange={(f) => update((p) => void (p.background.model.fill = f))}
+            onChange={(f) => setModel((d) => void (d.fill = f))}
           />
-          <DepthRangeField
-            min={bg.model.depth.min}
-            max={bg.model.depth.max}
-            onChange={(r) => update((p) => void (p.background.model.depth = r))}
-          />
-          <Toggle
-            label="Maximize depth range"
-            checked={bg.model.normalizeDepth}
-            onChange={(v) => update((p) => void (p.background.model.normalizeDepth = v))}
-          />
-          <Slider
-            label="Detail (unsharp)"
-            value={bg.model.detail}
-            min={0}
-            max={1}
-            step={0.05}
-            onChange={(v) => update((p) => void (p.background.model.detail = v))}
-          />
-          <Slider
-            label="Depth curve (γ)"
-            value={bg.model.gamma}
-            min={0.3}
-            max={3}
-            step={0.05}
-            onChange={(v) => update((p) => void (p.background.model.gamma = v))}
-          />
-          <Toggle
-            label="Supersample (2×)"
-            checked={bg.model.supersample}
-            onChange={(v) => update((p) => void (p.background.model.supersample = v))}
-          />
-          <NumberField
-            label="Edge falloff (mm)"
-            value={bg.model.edgeFalloffMm}
-            min={0}
-            step={0.5}
-            onChange={(v) => update((p) => void (p.background.model.edgeFalloffMm = v))}
-          />
-          <Slider
-            label="AO shading"
-            value={bg.model.aoStrength}
-            min={0}
-            max={1}
-            step={0.05}
-            onChange={(v) => update((p) => void (p.background.model.aoStrength = v))}
-          />
-          <NumberField
-            label="AO radius (mm)"
-            value={bg.model.aoRadiusMm}
-            min={0.5}
-            step={0.5}
-            onChange={(v) => update((p) => void (p.background.model.aoRadiusMm = v))}
-          />
-          <Slider
-            label="Surface detail"
-            value={bg.model.surfaceShade}
-            min={0}
-            max={1}
-            step={0.05}
-            onChange={(v) => update((p) => void (p.background.model.surfaceShade = v))}
-          />
-          <NumberField
-            label="Surface radius (mm)"
-            value={bg.model.surfaceShadeRadiusMm}
-            min={0.2}
-            step={0.5}
-            onChange={(v) => update((p) => void (p.background.model.surfaceShadeRadiusMm = v))}
-          />
-        </>
-      )}
-    </Panel>
+        )}
+      </Panel>
+
+      {bg.type === 'model' && <ShadingSection model={bg.model} setModel={setModel} />}
+    </div>
   );
 }
 
-export function BorderPanel() {
+export function FrameTab() {
   const border = useProjectStore((s) => s.project.border);
   const update = useProjectStore((s) => s.update);
   return (
-    <Panel
-      title="Border"
-      right={
-        <Toggle
-          label=""
-          checked={border.enabled}
-          onChange={(v) => update((p) => void (p.border.enabled = v))}
-        />
-      }
-    >
+    <div className="tab-body">
+      <EnableRow
+        label="Enable frame"
+        checked={border.enabled}
+        onChange={(v) => update((p) => void (p.border.enabled = v))}
+      />
       <div className="field__label">
         <span>Profile (outer → inner edge)</span>
       </div>
@@ -387,163 +550,6 @@ export function BorderPanel() {
         max={border.depth.max}
         onChange={(r) => update((p) => void (p.border.depth = r))}
       />
-    </Panel>
-  );
-}
-
-export function ForegroundPanel() {
-  const fg = useProjectStore((s) => s.project.foreground);
-  const update = useProjectStore((s) => s.update);
-  const bumpAssets = useProjectStore((s) => s.bumpAssets);
-  return (
-    <Panel
-      title="Foreground"
-      right={
-        <Toggle
-          label=""
-          checked={fg.enabled}
-          onChange={(v) => update((p) => void (p.foreground.enabled = v))}
-        />
-      }
-    >
-      <ModelSourcePicker
-        model={fg.model}
-        setModel={(mut) => update((p) => mut(p.foreground.model))}
-        bumpAssets={bumpAssets}
-      />
-      <Slider
-        label="Scale"
-        value={fg.model.scale}
-        min={0.1}
-        max={5}
-        step={0.05}
-        onChange={(v) => update((p) => void (p.foreground.model.scale = v))}
-      />
-      <div className="row">
-        <NumberField
-          label="Offset X (mm)"
-          value={fg.model.offsetXmm}
-          step={1}
-          onChange={(v) => update((p) => void (p.foreground.model.offsetXmm = v))}
-        />
-        <NumberField
-          label="Offset Y (mm)"
-          value={fg.model.offsetYmm}
-          step={1}
-          onChange={(v) => update((p) => void (p.foreground.model.offsetYmm = v))}
-        />
-      </div>
-      <FillEditor
-        label="Fill"
-        fill={fg.model.fill}
-        onChange={(f) => update((p) => void (p.foreground.model.fill = f))}
-      />
-      <DepthRangeField
-        min={fg.model.depth.min}
-        max={fg.model.depth.max}
-        onChange={(r) => update((p) => void (p.foreground.model.depth = r))}
-      />
-      <Toggle
-        label="Maximize depth range"
-        checked={fg.model.normalizeDepth}
-        onChange={(v) => update((p) => void (p.foreground.model.normalizeDepth = v))}
-      />
-      <Slider
-        label="Detail (unsharp)"
-        value={fg.model.detail}
-        min={0}
-        max={1}
-        step={0.05}
-        onChange={(v) => update((p) => void (p.foreground.model.detail = v))}
-      />
-      <Slider
-        label="Depth curve (γ)"
-        value={fg.model.gamma}
-        min={0.3}
-        max={3}
-        step={0.05}
-        onChange={(v) => update((p) => void (p.foreground.model.gamma = v))}
-      />
-      <Select
-        label="Geometry mode"
-        value={fg.model.basRelief ? 'relief' : 'raw'}
-        options={[
-          { value: 'relief', label: 'Bas-relief' },
-          { value: 'raw', label: 'Raw geometry' },
-        ]}
-        onChange={(v) => update((p) => void (p.foreground.model.basRelief = v === 'relief'))}
-      />
-      {fg.model.basRelief && (
-        <>
-          <Slider
-            label="Compression / detail (β)"
-            value={fg.model.reliefBeta}
-            min={0.2}
-            max={0.95}
-            step={0.01}
-            onChange={(v) => update((p) => void (p.foreground.model.reliefBeta = v))}
-          />
-          <Slider
-            label="Detail level (α)"
-            value={fg.model.reliefAlphaFactor}
-            min={0.05}
-            max={0.4}
-            step={0.01}
-            onChange={(v) => update((p) => void (p.foreground.model.reliefAlphaFactor = v))}
-          />
-          <NumberField
-            label="Edge emergence (mm)"
-            value={fg.model.reliefEmergeMm}
-            min={0}
-            step={0.5}
-            onChange={(v) => update((p) => void (p.foreground.model.reliefEmergeMm = v))}
-          />
-        </>
-      )}
-      <Toggle
-        label="Supersample (2×)"
-        checked={fg.model.supersample}
-        onChange={(v) => update((p) => void (p.foreground.model.supersample = v))}
-      />
-      {!fg.model.basRelief && (
-        <NumberField
-          label="Edge falloff (mm)"
-          value={fg.model.edgeFalloffMm}
-          min={0}
-          step={0.5}
-          onChange={(v) => update((p) => void (p.foreground.model.edgeFalloffMm = v))}
-        />
-      )}
-      <Slider
-        label="AO shading"
-        value={fg.model.aoStrength}
-        min={0}
-        max={1}
-        step={0.05}
-        onChange={(v) => update((p) => void (p.foreground.model.aoStrength = v))}
-      />
-      <NumberField
-        label="AO radius (mm)"
-        value={fg.model.aoRadiusMm}
-        min={0.5}
-        step={0.5}
-        onChange={(v) => update((p) => void (p.foreground.model.aoRadiusMm = v))}
-      />
-      <Slider
-        label="Surface detail"
-        value={fg.model.surfaceShade}
-        min={0}
-        max={1}
-        step={0.05}
-        onChange={(v) => update((p) => void (p.foreground.model.surfaceShade = v))}
-      />
-      <NumberField
-        label="Surface radius (mm)"
-        value={fg.model.surfaceShadeRadiusMm}
-        min={0.2}
-        step={0.5}
-        onChange={(v) => update((p) => void (p.foreground.model.surfaceShadeRadiusMm = v))}
-      />
-    </Panel>
+    </div>
   );
 }
