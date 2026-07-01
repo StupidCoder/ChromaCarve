@@ -38,6 +38,18 @@ function ModelSourcePicker({
   setModel: SetModel;
   bumpAssets: () => void;
 }) {
+  // Size the orbit gizmo to the output aspect so its orthographic framing matches
+  // the depth/color maps exactly (same projection, same zoom — "what you see…").
+  const output = useProjectStore((s) => s.project.output);
+  const outAspect = Math.max(0.4, Math.min(2.5, output.widthMm / output.heightMm));
+  const MAX_W = 248;
+  const MAX_H = 220;
+  let gizmoW = MAX_W;
+  let gizmoH = MAX_W / outAspect;
+  if (gizmoH > MAX_H) {
+    gizmoH = MAX_H;
+    gizmoW = MAX_H * outAspect;
+  }
   return (
     <>
       <Select
@@ -61,10 +73,24 @@ function ModelSourcePicker({
         />
       )}
       {(model.source !== 'obj' || model.assetRef) && (
-        <ObjRotationViewport
-          model={model}
-          onQuat={(q) => setModel((m) => void (m.rotationQuat = q))}
-        />
+        <>
+          <ObjRotationViewport
+            model={model}
+            onQuat={(q) => setModel((m) => void (m.rotationQuat = q))}
+            onScale={(s) => setModel((m) => void (m.scale = s))}
+            width={Math.round(gizmoW)}
+            height={Math.round(gizmoH)}
+          />
+          <Slider
+            label="Roll"
+            value={model.roll ?? 0}
+            min={-180}
+            max={180}
+            step={1}
+            format={(v) => `${Math.round(v)}°`}
+            onChange={(v) => setModel((m) => void (m.roll = v))}
+          />
+        </>
       )}
       {(model.source === 'torus' || model.source === 'torusknot') && (
         <Slider

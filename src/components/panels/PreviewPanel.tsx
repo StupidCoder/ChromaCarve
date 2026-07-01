@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { renderPreviewComposite } from '../../pipeline/composite';
 import { outputResolution, previewProject, useProjectStore } from '../../state/store';
-import { NumberField } from '../controls';
+import { NumberField, Toggle } from '../controls';
 
 /** Write composite color (rgba float, bottom-up) into a top-down ImageData. */
 function drawColor(ctx: CanvasRenderingContext2D, buf: Float32Array, w: number, h: number) {
@@ -141,6 +141,11 @@ export function PreviewPanel() {
           <div className="muted">
             Preview: {previewRes.width} × {previewRes.height} px
           </div>
+          <Toggle
+            label="Rotate light source"
+            checked={output.rotateLight ?? true}
+            onChange={(v) => update((p) => void (p.output.rotateLight = v))}
+          />
           <MapCanvases />
         </div>
       </div>

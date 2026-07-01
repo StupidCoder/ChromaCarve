@@ -517,6 +517,8 @@ export interface OutputSettings {
   previewMaxDepthMm: number;
   /** Density cap for the interactive previews (exports use `pixelsPerMm`). */
   previewPixelsPerMm: number;
+  /** Auto-orbit the 3D preview's light source (off = fixed key light). */
+  rotateLight: boolean;
 }
 
 export interface BackgroundImageSettings {
@@ -547,6 +549,8 @@ export interface ModelSettings {
   procBoxD: number;
   /** Rotation as a quaternion [x, y, z, w]. */
   rotationQuat: [number, number, number, number];
+  /** Camera roll about the view axis, in degrees [-180, 180]. */
+  roll: number;
   scale: number;
   fill: Fill;
   depth: DepthRange;
@@ -650,6 +654,7 @@ export function defaultProject(): Project {
       pixelsPerMm: 25,
       previewMaxDepthMm: 5,
       previewPixelsPerMm: 5,
+      rotateLight: true,
     },
     background: {
       enabled: true,
@@ -672,6 +677,7 @@ export function defaultProject(): Project {
         procBoxW: 1,
         procBoxD: 1,
         rotationQuat: [0, 0, 0, 1],
+        roll: 0,
         scale: 1,
         fill: solidFill('#888888'),
         depth: { min: 0, max: 0.5 },
@@ -718,6 +724,7 @@ export function defaultProject(): Project {
         procBoxW: 1,
         procBoxD: 1,
         rotationQuat: [0, 0, 0, 1],
+        roll: 0,
         scale: 1,
         fill: solidFill('#cccccc'),
         depth: { min: 0, max: 1 },

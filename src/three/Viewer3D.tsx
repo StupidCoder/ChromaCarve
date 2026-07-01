@@ -37,6 +37,9 @@ export function Viewer3D() {
   const assetVersion = useProjectStore((s) => s.assetVersion);
   const reliefVersion = useProjectStore((s) => s.reliefVersion);
   const mountRef = useRef<HTMLDivElement>(null);
+  // Live-read inside the animation loop (set up once) without restarting it.
+  const rotateLightRef = useRef(true);
+  rotateLightRef.current = project.output.rotateLight ?? true;
 
   const engine = useRef<{
     renderer: THREE.WebGLRenderer;
@@ -82,6 +85,14 @@ export function Viewer3D() {
     // Left-drag / one finger rotates, scroll / pinch zooms, right-drag / two
     // fingers pan (OrbitControls' default TWO-touch = DOLLY_PAN).
     controls.enablePan = true;
+    // The relief faces +Z; keep the camera in the front hemisphere so you can
+    // tilt around the piece but never orbit behind it (to the flat back). Small
+    // margins avoid grazing the plane exactly edge-on.
+    const EDGE = 0.12;
+    controls.minAzimuthAngle = -Math.PI / 2 + EDGE;
+    controls.maxAzimuthAngle = Math.PI / 2 - EDGE;
+    controls.minPolarAngle = EDGE;
+    controls.maxPolarAngle = Math.PI - EDGE;
 
     const material = new THREE.ShaderMaterial({
       vertexShader: VIEWER_VERT,
@@ -119,11 +130,20 @@ export function Viewer3D() {
     observer.observe(mount);
 
     let raf = 0;
-    const start = performance.now();
+    // Accumulate the light angle only while rotation is enabled, so toggling it
+    // off freezes the light exactly where it is (no jump to a preset position).
+    let lightAngle = 0.6; // initial upper-right key light
+    let lastT = performance.now();
     const loop = () => {
-      const t = (performance.now() - start) / 1000;
-      const angle = t * 0.8;
-      material.uniforms.uLightPos.value.set(Math.cos(angle) * 1.4, Math.sin(angle) * 1.4, 2.2);
+      const now = performance.now();
+      const dt = (now - lastT) / 1000;
+      lastT = now;
+      if (rotateLightRef.current) lightAngle += dt * 0.8;
+      material.uniforms.uLightPos.value.set(
+        Math.cos(lightAngle) * 1.4,
+        Math.sin(lightAngle) * 1.4,
+        2.2,
+      );
       material.uniforms.uCamPos.value.copy(camera.position);
       controls.update();
       renderer.render(scene, camera);
