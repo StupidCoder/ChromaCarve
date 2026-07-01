@@ -359,6 +359,9 @@ function WoodEditor({ fill, onChange }: { fill: Fill; onChange: (fill: Fill) => 
           { value: 'custom', label: 'Custom…' },
           { value: 'walnut', label: 'Walnut' },
           { value: 'oak', label: 'Oak' },
+          { value: 'mahogany', label: 'Mahogany' },
+          { value: 'redwood', label: 'Redwood' },
+          { value: 'poplar', label: 'Poplar' },
           { value: 'olive', label: 'Olive (figured)' },
         ]}
         onChange={(k) => {

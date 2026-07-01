@@ -281,6 +281,81 @@ export const WOOD_PRESETS: Record<string, () => Fill> = {
       fleckStrength: 0.6,
     },
   }),
+  mahogany: () => ({
+    type: 'wood',
+    color1: '#9a5236', // reddish-brown earlywood
+    color2: '#431c0f', // dark red latewood line
+    scaleMm: 30,
+    turbulence: 0.4,
+    angle: 0,
+    wood: {
+      ...defaultWoodParams(),
+      colorMid: '#723824',
+      depthScale: 0.5,
+      ringDensity: 4.2,
+      pithDepth: 2.6, // straight, fine grain with only gentle arcs
+      warpCoarseFreq: 0.14,
+      warpCoarseAmp: 0.4,
+      warpFineFreq: 0.5,
+      warpFineAmp: 0.1,
+      contrast: 0.55,
+      tintStrength: 0.2,
+      poreStrength: 0.18,
+      streakStrength: 0.5, // ribbon/stripe figure
+      fleckStrength: 0.4,
+      saturation: 0.95,
+    },
+  }),
+  redwood: () => ({
+    type: 'wood',
+    color1: '#c56a44', // light salmon earlywood
+    color2: '#5e2612', // dark red-brown latewood
+    scaleMm: 32,
+    turbulence: 0.35,
+    angle: 0,
+    wood: {
+      ...defaultWoodParams(),
+      colorMid: '#9a4a2c',
+      depthScale: 0.5,
+      ringDensity: 3.6, // broad, well-defined growth rings
+      pithDepth: 2.4,
+      warpCoarseFreq: 0.14,
+      warpCoarseAmp: 0.45,
+      warpFineFreq: 0.45,
+      warpFineAmp: 0.1,
+      contrast: 0.62, // crisp earlywood/latewood contrast
+      tintStrength: 0.25,
+      poreStrength: 0.1, // softwood — few pores
+      streakStrength: 0.4,
+      fleckStrength: 0.55,
+      saturation: 1.0,
+    },
+  }),
+  poplar: () => ({
+    type: 'wood',
+    color1: '#d8cca6', // pale cream
+    color2: '#8f8158', // muted greenish-tan (low contrast)
+    scaleMm: 30,
+    turbulence: 0.3,
+    angle: 0,
+    wood: {
+      ...defaultWoodParams(),
+      colorMid: '#b7a880',
+      depthScale: 0.4,
+      ringDensity: 3.8,
+      pithDepth: 3.0, // very straight, bland grain
+      warpCoarseFreq: 0.12,
+      warpCoarseAmp: 0.35,
+      warpFineFreq: 0.4,
+      warpFineAmp: 0.08,
+      contrast: 0.4, // soft, faint lines
+      tintStrength: 0.15,
+      poreStrength: 0.08, // diffuse-porous, barely visible
+      streakStrength: 0.3,
+      fleckStrength: 0.35,
+      saturation: 0.7, // pale, desaturated
+    },
+  }),
 };
 
 /** Build a stone `Fill` from stoneType + param overrides (preset helper). */
