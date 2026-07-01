@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="public/ChromaCarve.png" alt="ChromaCarve" width="460">
+</p>
+
 # ChromaCarve
 
 A browser tool for compositing a **color map** + a **depth/height map** for CNC relief

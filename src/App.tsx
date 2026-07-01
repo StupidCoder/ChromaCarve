@@ -6,10 +6,12 @@ import {
   ForegroundPanel,
 } from './components/panels/PartPanels';
 import { ExportPanel } from './components/panels/ExportPanel';
+import { Splash } from './components/Splash';
 
 export default function App() {
   return (
     <div className="app">
+      <Splash />
       <div className="pane pane--left">
         <div className="app-title">ChromaCarve</div>
         <OutputPanel />

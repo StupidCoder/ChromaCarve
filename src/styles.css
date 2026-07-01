@@ -34,6 +34,32 @@ body {
   overflow: hidden;
 }
 
+.splash {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  opacity: 1;
+  transition: opacity 0.55s ease;
+  /* Purely decorative overlay: never intercept input from the app underneath. */
+  pointer-events: none;
+}
+
+.splash--hidden {
+  opacity: 0;
+}
+
+.splash__logo {
+  width: min(62vw, 480px);
+  max-height: 70vh;
+  height: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 30px rgba(0, 0, 0, 0.45));
+}
+
 .pane {
   overflow-y: auto;
   height: 100vh;
