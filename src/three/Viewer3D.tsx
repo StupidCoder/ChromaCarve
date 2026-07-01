@@ -72,8 +72,10 @@ export function Viewer3D() {
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(40, initW / initH, 0.01, 100);
-    camera.up.set(0, 0, 1);
-    camera.position.set(0, -2.6, 2.0);
+    // Look straight down onto the XY plane (+Z is toward the camera). Up is +Y so
+    // the top of the canvas is the top of the relief.
+    camera.up.set(0, 1, 0);
+    camera.position.set(0, 0, 3.2);
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.target.set(0, 0, 0);
@@ -137,6 +139,9 @@ export function Viewer3D() {
       engine.current?.depthTex?.dispose();
       engine.current?.colorTex?.dispose();
       renderer.dispose();
+      // Release the GL context immediately (dispose() defers to GC) so remounts
+      // don't accumulate contexts against the browser's hard limit.
+      renderer.forceContextLoss();
       renderer.domElement.remove();
       engine.current = null;
     };

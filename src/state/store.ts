@@ -563,7 +563,7 @@ export function defaultProject(): Project {
       previewPixelsPerMm: 5,
     },
     background: {
-      enabled: false,
+      enabled: true,
       type: 'image',
       image: {
         assetRef: null,
@@ -618,7 +618,7 @@ export function defaultProject(): Project {
       depth: { min: 0, max: 0.5 },
     },
     foreground: {
-      enabled: false,
+      enabled: true,
       model: {
         source: 'obj',
         assetRef: null,

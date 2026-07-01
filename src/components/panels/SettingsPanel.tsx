@@ -112,7 +112,7 @@ export function SettingsPanel() {
         title="Show settings"
         aria-label="Show settings"
       >
-        <span className="panel-fab__icon">☰</span>
+        <span className="panel-fab__icon">{'⚙︎'}</span>
         <span className="panel-fab__text">Settings</span>
       </button>
     );
@@ -124,8 +124,8 @@ export function SettingsPanel() {
     <div className="floating-panel floating-panel--left panel-enter">
       <div className="panel-topbar">
         <span className="brand">
-          <span className="brand__mark" />
-          ChromaCarve
+          <span className="brand__icon">{'⚙︎'}</span>
+          Settings
         </span>
         <button
           className="icon-btn"

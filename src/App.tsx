@@ -28,6 +28,7 @@ export default function App() {
       <div className="stage">
         <Viewer3D />
       </div>
+      <img src="/ChromaCarve_small.png" alt="ChromaCarve" className="app-logo" />
       <SettingsPanel />
       <PreviewPanel />
       <ProgressBar />

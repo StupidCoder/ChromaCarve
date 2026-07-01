@@ -98,8 +98,8 @@ export function PreviewPanel() {
         title="Show preview maps"
         aria-label="Show preview maps"
       >
-        <span className="panel-fab__icon">▣</span>
-        <span className="panel-fab__text">Maps</span>
+        <span className="panel-fab__icon">◉</span>
+        <span className="panel-fab__text">Preview</span>
       </button>
     );
   }
@@ -109,7 +109,10 @@ export function PreviewPanel() {
   return (
     <div className="floating-panel floating-panel--right panel-enter">
       <div className="panel-topbar">
-        <span className="brand">Preview</span>
+        <span className="brand">
+          <span className="brand__icon">◉</span>
+          Preview
+        </span>
         <button
           className="icon-btn"
           onClick={() => setCollapsed(true)}

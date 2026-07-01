@@ -74,6 +74,10 @@ export function ObjRotationViewport({
     return () => {
       controls.dispose();
       renderer.dispose();
+      // dispose() alone leaves the GL context alive until GC; release it now so
+      // repeatedly mounting this gizmo (e.g. switching settings tabs) doesn't
+      // exhaust the browser's WebGL context limit and evict the main preview.
+      renderer.forceContextLoss();
       renderer.domElement.remove();
       engine.current = null;
     };
