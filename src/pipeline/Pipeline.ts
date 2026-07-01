@@ -25,10 +25,18 @@ const PROFILE_LUT = 256; // resolution of the border profile lookup texture
 
 const TILE_TEX = 1024; // resolution of the single-tile height map
 
-// Cap the bas-relief Poisson solve to this dimension for interactive previews
-// (the solve is a CPU readback + spectral solve; full resolution is reserved for
-// export). Relief is low-frequency, so upsampling the capped result looks close.
-const RELIEF_MAX_SOLVE_DIM = 1024;
+// The bas-relief Dirichlet solve runs the DCT-preconditioned CG on power-of-two
+// grids (fast radix-2 FFT; arbitrary sizes fall back to slow Bluestein). It is
+// capped smaller for interactive previews and larger for exports; relief is
+// low-frequency so the upsampled result closely matches full resolution.
+const RELIEF_PREVIEW_DIM = 512;
+const RELIEF_EXPORT_DIM = 2048;
+
+/** Largest useful power-of-two solve size for a dimension, capped. */
+function reliefSolveSize(dim: number, cap: number): number {
+  const p = Math.pow(2, Math.round(Math.log2(Math.max(1, dim))));
+  return Math.min(cap, p);
+}
 
 // Pass raw image bytes / target values through without automatic sRGB
 // conversion so the previewed/exported values are predictable (WYSIWYG).
@@ -123,6 +131,19 @@ function bilinearUpsample(
     }
   }
   return out;
+}
+
+/** Resample a single-channel field to sw*sh (box-average down, bilinear up). */
+function resampleField(
+  src: Float32Array,
+  w: number,
+  h: number,
+  sw: number,
+  sh: number,
+): Float32Array {
+  return sw <= w && sh <= h
+    ? boxDownsample(src, w, h, sw, sh)
+    : bilinearUpsample(src, w, h, sw, sh);
 }
 
 /** Result of a pipeline render: composite color + depth targets and preview scale. */
@@ -531,6 +552,7 @@ export class Pipeline {
           t.reliefDepth,
           res.width,
           res.height,
+          Math.min(output.widthMm, output.heightMm),
           !!opts.reliefFullRes,
         );
         heightTarget = t.reliefDepth;
@@ -751,6 +773,7 @@ export class Pipeline {
     dest: THREE.WebGLRenderTarget,
     w: number,
     h: number,
+    minMm: number,
     fullRes: boolean,
   ): { min: number; max: number } {
     const buf = this.readFloat(src); // RGBA float, w*h*4, bottom-up rows
@@ -764,28 +787,23 @@ export class Pipeline {
 
     const params = {
       beta: model.reliefBeta,
-      tauPercentile: model.reliefTauPct,
-      wallGamma: model.reliefWallGamma,
       alphaFactor: model.reliefAlphaFactor,
+      // Emergence fade (mm) as a fraction of the smaller physical dimension, so
+      // it is resolution-independent across preview and export.
+      emergeFrac: model.reliefEmergeMm / Math.max(minMm, 1e-3),
     };
 
-    // Cap the solve grid for previews; relief is low-frequency so the upsampled
-    // result closely matches the full-resolution solve.
-    let sw = w;
-    let sh = h;
-    let solveHeight: Float32Array = height;
-    let solveMask: Float32Array = mask;
-    const downscale = !fullRes && Math.max(w, h) > RELIEF_MAX_SOLVE_DIM;
-    if (downscale) {
-      const s = RELIEF_MAX_SOLVE_DIM / Math.max(w, h);
-      sw = Math.max(1, Math.round(w * s));
-      sh = Math.max(1, Math.round(h * s));
-      solveHeight = boxDownsample(height, w, h, sw, sh);
-      solveMask = boxDownsample(mask, w, h, sw, sh);
-    }
+    // Solve on a power-of-two grid (fast FFT) capped by preview/export budget;
+    // resample the height + mask in, and the relief out.
+    const cap = fullRes ? RELIEF_EXPORT_DIM : RELIEF_PREVIEW_DIM;
+    const sw = reliefSolveSize(w, cap);
+    const sh = reliefSolveSize(h, cap);
+    const resample = sw !== w || sh !== h;
+    const solveHeight = resample ? resampleField(height, w, h, sw, sh) : height;
+    const solveMask = resample ? resampleField(mask, w, h, sw, sh) : mask;
 
     const result = basRelief(solveHeight, solveMask, sw, sh, params);
-    const reliefFull = downscale ? bilinearUpsample(result.data, sw, sh, w, h) : result.data;
+    const reliefFull = resample ? bilinearUpsample(result.data, sw, sh, w, h) : result.data;
 
     // Repack into the CPU-upload texture: R = relief height, G = original mask.
     const data = this.reliefTex!.image.data as unknown as Float32Array;

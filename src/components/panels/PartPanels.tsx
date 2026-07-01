@@ -472,38 +472,27 @@ export function ForegroundPanel() {
       {fg.model.basRelief && (
         <>
           <Slider
-            label="Detail preservation (β)"
+            label="Compression / detail (β)"
             value={fg.model.reliefBeta}
-            min={0.1}
-            max={1}
+            min={0.2}
+            max={0.95}
             step={0.01}
             onChange={(v) => update((p) => void (p.foreground.model.reliefBeta = v))}
           />
           <Slider
-            label="Outline dissolve (γ)"
-            value={fg.model.reliefWallGamma}
-            min={0}
-            max={0.1}
-            step={0.005}
-            format={(v) => v.toFixed(3)}
-            onChange={(v) => update((p) => void (p.foreground.model.reliefWallGamma = v))}
-          />
-          <Slider
-            label="Wall threshold (τ pct)"
-            value={fg.model.reliefTauPct}
-            min={0.8}
-            max={0.99}
-            step={0.01}
-            format={(v) => `${(v * 100).toFixed(0)}%`}
-            onChange={(v) => update((p) => void (p.foreground.model.reliefTauPct = v))}
-          />
-          <Slider
-            label="Compression (α factor)"
+            label="Detail level (α)"
             value={fg.model.reliefAlphaFactor}
-            min={0.02}
-            max={0.3}
+            min={0.05}
+            max={0.4}
             step={0.01}
             onChange={(v) => update((p) => void (p.foreground.model.reliefAlphaFactor = v))}
+          />
+          <NumberField
+            label="Edge emergence (mm)"
+            value={fg.model.reliefEmergeMm}
+            min={0}
+            step={0.5}
+            onChange={(v) => update((p) => void (p.foreground.model.reliefEmergeMm = v))}
           />
         </>
       )}

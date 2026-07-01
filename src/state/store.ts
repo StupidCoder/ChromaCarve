@@ -88,14 +88,13 @@ export interface ModelSettings {
    * When off, the raw height path is used (unchanged).
    */
   basRelief: boolean;
-  /** Fattal exponent in (0,1): <1 compresses large gradients, keeps detail. */
+  /** Fattal exponent in (0,1): lower = stronger form compression + more detail. */
   reliefBeta: number;
-  /** Wall threshold as a percentile of gradient magnitude (per-image). */
-  reliefTauPct: number;
-  /** Multiplier for gradients above the wall threshold (0 = fully dissolve). */
-  reliefWallGamma: number;
   /** alpha = reliefAlphaFactor × mean gradient magnitude (Fattal reference). */
   reliefAlphaFactor: number;
+  /** Silhouette emergence: width (mm) over which the relief fades to the base at
+   * the outline, so the model emerges smoothly from the background. */
+  reliefEmergeMm: number;
   /** Render the model depth at 2x and downsample to reduce edge aliasing. */
   supersample: boolean;
   /**
@@ -202,10 +201,9 @@ export function defaultProject(): Project {
         detail: 0,
         gamma: 1,
         basRelief: false,
-        reliefBeta: 0.85,
-        reliefTauPct: 0.95,
-        reliefWallGamma: 0,
-        reliefAlphaFactor: 0.1,
+        reliefBeta: 0.5,
+        reliefAlphaFactor: 0.18,
+        reliefEmergeMm: 1.5,
         supersample: false,
         edgeFalloffMm: 0,
         aoStrength: 0.5,
@@ -249,10 +247,9 @@ export function defaultProject(): Project {
         detail: 0,
         gamma: 1,
         basRelief: false,
-        reliefBeta: 0.85,
-        reliefTauPct: 0.95,
-        reliefWallGamma: 0,
-        reliefAlphaFactor: 0.1,
+        reliefBeta: 0.5,
+        reliefAlphaFactor: 0.18,
+        reliefEmergeMm: 1.5,
         supersample: false,
         edgeFalloffMm: 0,
         aoStrength: 0.5,
