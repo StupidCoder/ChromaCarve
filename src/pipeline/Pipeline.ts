@@ -673,11 +673,12 @@ export class Pipeline {
     target: THREE.WebGLRenderTarget,
     w: number,
     h: number,
-    percentile: number,
+    loFrac: number,
+    hiFrac: number,
   ): { min: number; max: number } {
     const buf = new Float32Array(w * h * 4);
     this.renderer.readRenderTargetPixels(target, 0, 0, w, h, buf);
-    const BINS = 256;
+    const BINS = 1024;
     const hist = new Int32Array(BINS);
     let total = 0;
     for (let i = 0; i < w * h; i++) {
@@ -687,8 +688,8 @@ export class Pipeline {
       total++;
     }
     if (total === 0) return { min: 0, max: 1 };
-    const loCount = total * percentile;
-    const hiCount = total * (1 - percentile);
+    const loCount = total * loFrac;
+    const hiCount = total * (1 - hiFrac);
     let lo = 0;
     let hi = BINS - 1;
     let cum = 0;
@@ -929,7 +930,11 @@ export class Pipeline {
     // processed field), avoiding a second GPU readback here.
     const range =
       precomputedRange ??
-      (model.normalizeDepth ? this.computeRange(rangeSrc, rangeW, rangeH, 0.01) : { min: 0, max: 1 });
+      (model.normalizeDepth
+        ? // Clip a small far (low) sliver for a clean floor, but almost nothing at
+          // the near (high) end so a large face-on surface isn't flattened to white.
+          this.computeRange(rangeSrc, rangeW, rangeH, 0.01, 0.0005)
+        : { min: 0, max: 1 });
     md.uniforms.uModel.value = height.texture;
     md.uniforms.uBlur.value = blurTex;
     md.uniforms.uFeather.value = featherTex;

@@ -301,7 +301,11 @@ function normalizeToResult(
     norm[i] = v;
     data[i] = v;
   }
+  // Clip only a sliver at the near (high) end: the nearest surface is the carved
+  // detail we want at full white, and for models with a large face-on surface
+  // (e.g. a torso) the top 1% is a real region that would flatten to a white
+  // plateau. A small far (low) clip still gives a clean floor.
   const min = percentile(norm, mask, n, 0.01);
-  const max = percentile(norm, mask, n, 0.99);
+  const max = percentile(norm, mask, n, 0.9995);
   return { data, min, max: max > min ? max : min + 1e-3 };
 }
