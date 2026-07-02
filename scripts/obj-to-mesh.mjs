@@ -8,19 +8,35 @@
 //   f32 bboxMin[3] | f32 bboxMax[3]
 //   u16 quantPositions[vertexCount*3] | u32 indices[indexCount]
 //
-// Usage: node scripts/obj-to-mesh.mjs input.obj output.msh
+// Optional 3rd arg rotates positions, e.g. 'x90', 'x-90', 'y-90', 'z90'
+// (axis + signed degrees, right-handed). Bakes a default orientation.
+//
+// Usage: node scripts/obj-to-mesh.mjs input.obj output.msh [rotation]
 import { readFileSync, writeFileSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
 
-const [, , inPath, outPath] = process.argv;
-if (!inPath || !outPath) throw new Error('usage: obj-to-mesh.mjs input.obj output.msh');
+const [, , inPath, outPath, rot] = process.argv;
+if (!inPath || !outPath) throw new Error('usage: obj-to-mesh.mjs input.obj output.msh [rotation]');
+
+/** Rotate [x,y,z] by the optional `axis+deg` spec (right-handed). */
+function rotate(x, y, z) {
+  if (!rot) return [x, y, z];
+  const axis = rot[0];
+  const t = (parseFloat(rot.slice(1)) * Math.PI) / 180;
+  const c = Math.cos(t);
+  const s = Math.sin(t);
+  if (axis === 'x') return [x, y * c - z * s, y * s + z * c];
+  if (axis === 'y') return [x * c + z * s, y, -x * s + z * c];
+  if (axis === 'z') return [x * c - y * s, x * s + y * c, z];
+  throw new Error(`bad rotation axis in "${rot}" (use x/y/z)`);
+}
 
 const pos = [];
 const idx = [];
 for (const line of readFileSync(inPath, 'utf8').split('\n')) {
   if (line.startsWith('v ')) {
     const p = line.split(/\s+/);
-    pos.push(+p[1], +p[2], +p[3]);
+    pos.push(...rotate(+p[1], +p[2], +p[3]));
   } else if (line.startsWith('f ')) {
     // face tokens may be 'v', 'v/vt' or 'v//vn'; take the vertex index (1-based).
     const v = line.split(/\s+/).slice(1).map((t) => parseInt(t, 10) - 1);

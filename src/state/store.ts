@@ -554,7 +554,7 @@ export interface BackgroundImageSettings {
   depth: DepthRange;
 }
 
-export type ModelSource = 'obj' | 'torus' | 'sphere' | 'torusknot' | 'cube' | 'horse';
+export type ModelSource = 'obj' | 'torus' | 'sphere' | 'torusknot' | 'cube' | 'horse' | 'rose' | 'koi';
 
 export interface ModelSettings {
   /** Where the geometry comes from: a loaded OBJ or a procedural primitive. */
