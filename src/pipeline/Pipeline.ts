@@ -302,10 +302,16 @@ export class Pipeline {
     if (w === this.width && h === this.height) return;
     this.width = w;
     this.height = h;
-    // Resized targets: the cached relief no longer applies until re-solved.
-    this.hasRelief = false;
     this.renderer.setSize(w, h, false);
-    for (const key of Object.keys(this.targets)) this.targets[key].dispose();
+    // Keep the current relief target alive so it can be rescaled into the new one
+    // below — the render then keeps using bas-relief (scaled) while a fresh solve
+    // runs, instead of dropping to the raw height field. (Preserve from
+    // reliefDepth, which actually holds the relief; reliefTex is only upload
+    // staging and is reallocated empty each resize.)
+    const prevReliefDepth = this.hasRelief ? this.targets.reliefDepth : null;
+    for (const key of Object.keys(this.targets)) {
+      if (this.targets[key] !== prevReliefDepth) this.targets[key].dispose();
+    }
     this.targets = {};
     for (const key of [
       'bgColor',
@@ -332,6 +338,19 @@ export class Pipeline {
     this.targets.modelDepth = makeTarget(w, h, true);
     // Processed bas-relief height (R) + coverage (G), same float format.
     this.targets.reliefDepth = makeTarget(w, h);
+
+    // Rescale the previous relief (if any) into the new-size reliefDepth so the
+    // render keeps using bas-relief across the resize, rather than reverting to
+    // raw depth until the next solve completes.
+    if (prevReliefDepth) {
+      const blur = this.mats.blur;
+      blur.uniforms.uSigma.value = 0;
+      blur.uniforms.uTex.value = prevReliefDepth.texture; // old-size -> new-size = scaled
+      this.pass(blur, this.targets.reliefDepth);
+      prevReliefDepth.dispose();
+    } else {
+      this.hasRelief = false;
+    }
 
     // (Re)allocate the CPU-upload texture that carries the relief result back to
     // the GPU. Float + Nearest to match makeTarget so no quantization sneaks in.
@@ -867,8 +886,9 @@ export class Pipeline {
 
   /**
    * Upload a worker-computed relief (R = height) + coverage (G = mask) into
-   * `reliefDepth` so subsequent synchronous renders use it. Dropped if the
-   * pipeline was resized while the solve ran.
+   * `reliefDepth` so subsequent synchronous renders use it. Resizes the pipeline
+   * to this relief's resolution first, so a concurrent render at a different size
+   * (e.g. the preview while an export solves) can't cause the upload to be lost.
    */
   uploadRelief(
     data: Float32Array,
@@ -879,7 +899,7 @@ export class Pipeline {
     min: number,
     max: number,
   ): void {
-    if (w !== this.width || h !== this.height) return; // resolution changed under us
+    this.ensureSize(w, h);
     const tex = this.reliefTex!.image.data as unknown as Float32Array;
     const n = w * h;
     for (let i = 0; i < n; i++) {

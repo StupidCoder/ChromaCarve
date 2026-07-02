@@ -1,7 +1,21 @@
 import { encode } from 'fast-png';
-import { getPipeline } from '../pipeline/Pipeline';
-import { updateReliefExport } from '../relief/reliefController';
+import { getPipeline, type Pipeline } from '../pipeline/Pipeline';
+import { solveReliefExport } from '../relief/reliefController';
 import { outputResolution, type Project } from '../state/store';
+
+/**
+ * Solve the full-resolution relief and upload it, then return `pipeline.render`'s
+ * result — all synchronous after the (awaited) solve, so a concurrent preview
+ * render can't resize the shared pipeline between the upload and the read-back
+ * (which would otherwise export the raw depth instead of the bas-relief).
+ */
+async function renderForExport(pipeline: Pipeline, project: Project) {
+  const relief = await solveReliefExport(project);
+  if (relief) {
+    pipeline.uploadRelief(relief.data, relief.mask, relief.w, relief.h, relief.model, relief.min, relief.max);
+  }
+  return pipeline.render(project);
+}
 
 /**
  * The GPU's max texture dimension (px). Exports can't exceed this on either axis
@@ -55,8 +69,7 @@ function clampToMaxTexture(project: Project): Project {
 export async function exportDepthPng(project: Project, filename = 'depth.png') {
   const pipeline = getPipeline();
   project = clampToMaxTexture(project);
-  await updateReliefExport(project); // full-resolution relief solve (worker) first
-  const result = pipeline.render(project);
+  const result = await renderForExport(pipeline, project);
   const { width, height } = pipeline.size;
   const buf = pipeline.readFloat(result.depth);
 
@@ -84,8 +97,7 @@ export async function exportDepthPng(project: Project, filename = 'depth.png') {
 export async function exportColorPng(project: Project, filename = 'color.png') {
   const pipeline = getPipeline();
   project = clampToMaxTexture(project);
-  await updateReliefExport(project); // full-resolution relief solve (worker) first
-  const result = pipeline.render(project);
+  const result = await renderForExport(pipeline, project);
   const { width, height } = pipeline.size;
   const buf = pipeline.readFloat(result.color);
 
