@@ -47,7 +47,7 @@ Every part is textured with a **Fill**, evaluated procedurally in canvas space:
   around a wandering pith axis (realistic cathedral flames, irregular ring spacing, thin
   latewood lines, high-frequency pores, heart-colour zoning); and **figured**, a
   domain-warped-noise wood with dense fibrous grit and knots (see credits). Species
-  presets: **Walnut, Oak, Mahogany, Redwood, Poplar, Olive, Figured**. Knobs cover ring
+  presets: **Walnut, Oak, Mahogany, Redwood, Poplar, Olive, Rosewood**. Knobs cover ring
   density, pith depth/wander, grain turbulence, line sharpness, colour zoning, pores,
   figure streak, per-ring variation and saturation.
 - **Stone** — volumetric **marble, onyx, sandstone, granite, terrazzo, travertine** and

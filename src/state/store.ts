@@ -359,20 +359,19 @@ export const WOOD_PRESETS: Record<string, () => Fill> = {
       saturation: 0.7, // pale, desaturated
     },
   }),
-  figured: () => ({
+  rosewood: () => ({
     type: 'wood',
-    // Warped-flow figured wood (grain layout 'figured'). Display colours = the
-    // gamma-mapped equivalent of dean_the_coder's linear palette, so the
-    // (gamma-free) figured shader reproduces the reference cream/dark look.
-    color1: '#bd9878', // earlywood / bright figure (cream)
-    color2: '#342215', // latewood / knot line (near-black)
+    // Rosewood: dramatic warped 'figured' flow with dark streaks. Reddish-brown
+    // display palette (blended in linear light by the figured shader).
+    color1: '#bb8a5c', // lighter golden-tan figure
+    color2: '#2b160f', // dark chocolate streak / knot line
     scaleMm: 26,
     turbulence: 0.6,
     angle: 0,
     wood: {
       ...defaultWoodParams(),
       mode: 'figured',
-      colorMid: '#885d3e',
+      colorMid: '#7a4529', // reddish brown
       depthScale: 0.5,
       saturation: 1.0,
       seed: 3, // a bright, well-figured region of the noise field
@@ -451,7 +450,7 @@ export const STONE_PRESETS: Record<string, () => Fill> = {
       edgeWidth: 0.05,
       colorStops: ['#9a938a', '#7a736a', '#575049'],
       veinColor: '#1c1814',
-      microRelief: { enabled: false, amount: 0.08, mode: 'subtract' },
+      microRelief: { enabled: true, amount: 0.04, mode: 'subtract' },
     }),
   // Curated marbles
   carrara: () =>

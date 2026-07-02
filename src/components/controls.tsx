@@ -681,7 +681,7 @@ export function FillEditor({
   const WOOD_ITEMS: [string, string][] = [
     ['walnut', 'Walnut'], ['oak', 'Oak'], ['mahogany', 'Mahogany'],
     ['redwood', 'Redwood'], ['poplar', 'Poplar'], ['olive', 'Olive'],
-    ['figured', 'Figured'],
+    ['rosewood', 'Rosewood'],
   ];
   const STONE_ITEMS: [string, string][] = [
     ['carrara', 'Carrara marble'], ['calacatta', 'Calacatta marble'],
