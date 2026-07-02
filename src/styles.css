@@ -648,6 +648,12 @@ button:active {
   line-height: 1.4;
 }
 
+.warn {
+  color: var(--danger);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 /* ------------------------------------------------------------------ splash */
 
 .splash {

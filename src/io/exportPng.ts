@@ -3,6 +3,20 @@ import { getPipeline } from '../pipeline/Pipeline';
 import { updateReliefExport } from '../relief/reliefController';
 import { outputResolution, type Project } from '../state/store';
 
+/**
+ * The GPU's max texture dimension (px). Exports can't exceed this on either axis
+ * (a render target larger than it can't be allocated). Used by the UI to bound
+ * the resolution input. Falls back to a conservative value if the GL context
+ * isn't up yet.
+ */
+export function maxExportTextureSize(): number {
+  try {
+    return getPipeline().renderer.capabilities.maxTextureSize;
+  } catch {
+    return 8192;
+  }
+}
+
 function download(data: Uint8Array, filename: string, type = 'image/png') {
   const blob = new Blob([data as BlobPart], { type });
   const url = URL.createObjectURL(blob);

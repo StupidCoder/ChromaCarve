@@ -1,5 +1,5 @@
-import { useState, type ReactNode } from 'react';
-import { exportColorPng, exportDepthPng } from '../../io/exportPng';
+import { useMemo, useState, type ReactNode } from 'react';
+import { exportColorPng, exportDepthPng, maxExportTextureSize } from '../../io/exportPng';
 import { exportProjectJson, importProjectJson } from '../../io/projectJson';
 import { outputResolution, useProjectStore } from '../../state/store';
 import { FileInput, NumberField } from '../controls';
@@ -36,6 +36,11 @@ function ExportTab() {
   const update = useProjectStore((s) => s.update);
   const setProject = useProjectStore((s) => s.setProject);
   const res = outputResolution(output);
+  const maxTex = useMemo(() => maxExportTextureSize(), []);
+  // Largest px/mm before the longest axis hits the GPU's texture limit.
+  const longestMm = Math.max(output.widthMm, output.heightMm, 1);
+  const maxPxPerMm = maxTex / longestMm;
+  const overCap = Math.max(res.width, res.height) > maxTex;
 
   return (
     <div className="tab-body">
@@ -43,11 +48,16 @@ function ExportTab() {
         label="Resolution (px / mm)"
         value={output.pixelsPerMm}
         min={0.1}
+        max={maxPxPerMm}
         step={0.5}
         onChange={(v) => update((p) => void (p.output.pixelsPerMm = v))}
       />
+      <div className={overCap ? 'warn' : 'muted'}>
+        Output: {res.width} × {res.height} px{overCap ? ' — exceeds GPU limit, will be capped' : ''}
+      </div>
       <div className="muted">
-        Output: {res.width} × {res.height} px
+        This GPU's max texture size is {maxTex.toLocaleString()} px (≤ {maxPxPerMm.toFixed(1)} px/mm at{' '}
+        {output.widthMm} × {output.heightMm} mm).
       </div>
       <div className="button-stack">
         <button
