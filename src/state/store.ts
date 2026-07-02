@@ -5,26 +5,26 @@ import { create } from 'zustand';
  * (minus binary assets, which are referenced by filename via `assetRef`).
  */
 
-export type FillType = 'solid' | 'wood' | 'stone';
+export type FillType = 'solid' | 'wood' | 'stone' | 'pattern';
 
 /** Grain layout for the volumetric wood material. */
 export type WoodMode = 'bands' | 'rings' | 'figured';
 
 /**
  * Depth-map micro-relief shared by the volumetric materials: emboss the
- * material's feature lines (wood grooves, marble veins, travertine voids, cracks)
- * into the height map. `mode` picks whether the feature sits proud ('add') or
- * recessed ('subtract'). Off by default.
+ * material's feature lines (wood grooves, marble veins, travertine voids, cracks,
+ * pattern creases/mortar/scales/weave) into the height map. Each material bakes
+ * its own signed direction into the shader mask (grooves/mortar recessed, veins/
+ * crowns proud, weave both), so only the strength is exposed here. Off by default.
  */
 export interface MicroRelief {
   enabled: boolean;
-  /** Height perturbation (fraction of normalized relief). */
+  /** Height perturbation strength (fraction of normalized relief). */
   amount: number;
-  mode: 'add' | 'subtract';
 }
 
-export function defaultMicroRelief(mode: 'add' | 'subtract' = 'subtract'): MicroRelief {
-  return { enabled: false, amount: 0.06, mode };
+export function defaultMicroRelief(): MicroRelief {
+  return { enabled: false, amount: 0.06 };
 }
 
 /**
@@ -87,7 +87,7 @@ export function defaultWoodParams(): WoodParams {
     fleckStrength: 0.5,
     saturation: 0.9,
     seed: 1,
-    microRelief: defaultMicroRelief('subtract'),
+    microRelief: defaultMicroRelief(),
   };
 }
 
@@ -161,7 +161,7 @@ export function defaultStoneParams(): StoneParams {
     colorStops: ['#efece6', '#cfc9bf', '#8f8a80'],
     matrixColor: '#eceae4',
     veinColor: '#7d7a72',
-    microRelief: defaultMicroRelief('add'),
+    microRelief: defaultMicroRelief(),
     veinFreqPrimary: 2.2,
     veinFreqSecondary: 7,
     secondaryVeinStrength: 0.35,
@@ -182,6 +182,60 @@ export function defaultStoneParams(): StoneParams {
   };
 }
 
+/** Which tiling pattern `evalPattern` produces. */
+export type PatternType = 'leather' | 'woven' | 'brick' | 'scales';
+
+/**
+ * Parameters for the tiling-pattern material ("Others" category — leather, woven,
+ * brick, scales). Only used when `Fill.type === 'pattern'`. `Fill.color1`/`color2`
+ * are the two main tones (grain/crease, warp/weft, brick/dark, scale/dark);
+ * `colorMid` the accent (leather mid, thread, mortar, mid scale). Reuses the
+ * shared Voronoi + two small tiling primitives; the tactile relief is embossed
+ * via `microRelief` (on by default for these).
+ */
+export interface PatternParams {
+  patternType: PatternType;
+  /** Z (depth) slice scale; kept small so the 2D tilings don't slide with relief. */
+  depthScale: number;
+  seed: number;
+  /** Accent colour (mortar / mid-thread / leather mid / mid scale). */
+  colorMid: string;
+  /** Edge/crease/dome sharpness. */
+  contrast: number;
+  /** Per-cell/brick/strand tonal variation (0 = uniform). */
+  variation: number;
+  saturation: number;
+  /** Crease / mortar / scale-edge width (relief + colour shaping). */
+  edgeWidth: number;
+  /** Sub-tiles (strands/bricks/scales) across one `scaleMm` feature. */
+  density: number;
+  /** Woven: 0 = plain weave, 1 = 2x2 twill (carbon fibre). */
+  twill: number;
+  /** Brick: row offset (0.5 = running bond, 0 = stacked). */
+  bond: number;
+  /** Scales: 0 = organic (Voronoi), 1 = structured fish-scale rows. */
+  rows: number;
+  microRelief: MicroRelief;
+}
+
+export function defaultPatternParams(): PatternParams {
+  return {
+    patternType: 'leather',
+    depthScale: 0.3,
+    seed: 1,
+    colorMid: '#7d5636',
+    contrast: 0.5,
+    variation: 0.4,
+    saturation: 0.9,
+    edgeWidth: 0.06,
+    density: 6,
+    twill: 0,
+    bond: 0.5,
+    rows: 1,
+    microRelief: { enabled: true, amount: 0.06 },
+  };
+}
+
 /** A solid color or a procedural texture, evaluated in canvas XY (mm). */
 export interface Fill {
   type: FillType;
@@ -197,8 +251,10 @@ export interface Fill {
   wood?: WoodParams;
   /** Volumetric-stone parameters (only used when `type === 'stone'`). */
   stone?: StoneParams;
+  /** Tiling-pattern parameters (only used when `type === 'pattern'`). */
+  pattern?: PatternParams;
   /** UI hint: which entry in the grouped fill picker this fill came from
-   * (e.g. 'solid', 'wood:walnut', 'stone:carrara'). Not used by the renderer. */
+   * (e.g. 'solid', 'wood:walnut', 'stone:carrara', 'pattern:leather'). Not used by the renderer. */
   preset?: string;
 }
 
@@ -440,7 +496,7 @@ export const STONE_PRESETS: Record<string, () => Fill> = {
       strataDensity: 4,
       cellScale: 9,
       colorStops: ['#e7d8bf', '#d3bd97', '#b8996f'],
-      microRelief: { enabled: false, amount: 0.08, mode: 'subtract' },
+      microRelief: { enabled: false, amount: 0.08 },
     }),
   cracked: () =>
     stoneFill({
@@ -450,7 +506,7 @@ export const STONE_PRESETS: Record<string, () => Fill> = {
       edgeWidth: 0.05,
       colorStops: ['#9a938a', '#7a736a', '#575049'],
       veinColor: '#1c1814',
-      microRelief: { enabled: true, amount: 0.04, mode: 'subtract' },
+      microRelief: { enabled: true, amount: 0.04 },
     }),
   // Curated marbles
   carrara: () =>
@@ -498,6 +554,77 @@ export const STONE_PRESETS: Record<string, () => Fill> = {
     }),
 };
 
+/** Build a pattern `Fill` from color stops + pattern param overrides. */
+function patternFill(
+  over: Partial<PatternParams> & { color1: string; color2: string; scaleMm: number },
+): Fill {
+  const { color1, color2, scaleMm, ...patternOver } = over;
+  return {
+    type: 'pattern',
+    color1,
+    color2,
+    scaleMm,
+    turbulence: 0.6,
+    angle: 0,
+    pattern: { ...defaultPatternParams(), ...patternOver },
+  };
+}
+
+/**
+ * "Others" tiling-pattern presets (leather / woven / brick / scales). Same shape
+ * as WOOD/STONE presets; micro-relief is on by default since the tactile emboss
+ * is the point of these materials.
+ */
+export const PATTERN_PRESETS: Record<string, () => Fill> = {
+  leather: () =>
+    patternFill({
+      color1: '#6b4a2f',
+      color2: '#3a2617',
+      scaleMm: 26,
+      patternType: 'leather',
+      colorMid: '#7d5636',
+      density: 7,
+      edgeWidth: 0.07,
+      microRelief: { enabled: true, amount: 0.05 },
+    }),
+  woven: () =>
+    patternFill({
+      color1: '#b08040', // warp
+      color2: '#7a5028', // weft
+      scaleMm: 24,
+      patternType: 'woven',
+      colorMid: '#8a6030',
+      density: 8,
+      twill: 0,
+      edgeWidth: 0.12,
+      microRelief: { enabled: true, amount: 0.06 },
+    }),
+  brick: () =>
+    patternFill({
+      color1: '#9c4a35',
+      color2: '#7a3626',
+      scaleMm: 60,
+      patternType: 'brick',
+      colorMid: '#cfc7b8', // mortar
+      density: 20,
+      bond: 0.5,
+      edgeWidth: 0.05,
+      microRelief: { enabled: true, amount: 0.08 },
+    }),
+  scales: () =>
+    patternFill({
+      color1: '#3a6f5c',
+      color2: '#274b3e',
+      scaleMm: 22,
+      patternType: 'scales',
+      colorMid: '#5aa588',
+      density: 7,
+      rows: 1,
+      edgeWidth: 0.08,
+      microRelief: { enabled: true, amount: 0.07 },
+    }),
+};
+
 /**
  * Normalize a raw (possibly legacy) fill from imported JSON. Legacy 2D fills are
  * migrated: `marble` -> volumetric stone (marble), `noise` -> solid. Also fills
@@ -517,9 +644,10 @@ export function migrateFill(raw: unknown): Fill {
     const amount = (f.wood as { microReliefAmount?: number }).microReliefAmount ?? 0;
     f.wood = {
       ...(f.wood as WoodParams),
-      microRelief: { enabled: amount > 0, amount: amount || 0.06, mode: 'subtract' },
+      microRelief: { enabled: amount > 0, amount: amount || 0.06 },
     };
   }
+  if (f.type === 'pattern' && !f.pattern) f.pattern = defaultPatternParams();
   return f;
 }
 

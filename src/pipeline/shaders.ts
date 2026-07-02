@@ -305,11 +305,11 @@ vec3 figuredColor(vec3 P) {
   return pow(lin, vec3(1.0 / 2.2));
 }
 
-// Latewood / grain mask at a point — reused to emboss depth micro-grooves.
+// Signed latewood / grain relief at a point (negative = grooves recessed).
 float woodGrainLine(vec2 pMm, float z) {
   vec3 q = woodBlockCoord(pMm, z);
-  if (uWoodMode > 1.5) return 1.0 - clamp(figuredTone(q * 0.25), 0.0, 1.0); // figured: dark grain = high mask
-  return woodTone(q);
+  float line = (uWoodMode > 1.5) ? (1.0 - clamp(figuredTone(q * 0.25), 0.0, 1.0)) : woodTone(q);
+  return -line; // grain lines carve down
 }
 
 vec3 evalWood(vec2 pMm, float z) {
@@ -465,29 +465,207 @@ vec3 generateStone(vec2 pMm, float z) {
   return clamp(col, 0.0, 1.0);
 }
 
-// Unsigned micro-relief mask per stone: veins (marble) sit proud, voids
-// (travertine) and cracks (cracked) sit recessed; the +/- sign is applied by
-// the depth pass from the material's microRelief mode. Others: no relief.
+// Signed micro-relief per stone: marble veins sit proud (+), travertine voids
+// and cracks sit recessed (-). Each feature bakes its own direction. Others: flat.
 float stoneReliefMask(vec2 pMm, float z) {
   vec3 P = stoneP(pMm, z);
   vec3 W = domainWarp(P, uStoneWarpCoarse, uStoneWarpFine, uFillTurb);
-  if (uStoneType < 0.5) return marbleVein(W);          // marble veins
-  if (uStoneType > 4.5 && uStoneType < 5.5) return stoneVoid(P); // travertine
-  if (uStoneType > 5.5) return stoneCrack(P);          // cracked
+  if (uStoneType < 0.5) return marbleVein(W);                       // veins proud
+  if (uStoneType > 4.5 && uStoneType < 5.5) return -stoneVoid(P);   // voids recessed
+  if (uStoneType > 5.5) return -stoneCrack(P);                      // cracks recessed
   return 0.0;
 }
 `;
 
 /**
- * Procedural fill evaluated in canvas XY (mm): solid color, volumetric wood, or
- * volumetric stone. Shared by the background, border and model color shaders.
+ * Tiling-pattern materials ("Others": leather, woven, brick, scales). Built from
+ * the shared Voronoi (leather pebbles / organic scales) plus two small tiling
+ * primitives — a weave interlace and an offset brick lattice. Colour via a
+ * 3-stop ramp (C2 -> mid -> C1); the tactile relief is a SIGNED per-material mask
+ * (creases/mortar recessed, pebbles/scale crowns proud, weave both ways).
+ */
+export const GLSL_PATTERN = /* glsl */ `
+uniform float uPatternType;       // 0 leather, 1 woven, 2 brick, 3 scales
+uniform float uPatternDepthScale;
+uniform vec3 uPatternSeed;
+uniform vec3 uPatternColorMid;
+uniform float uPatternContrast;
+uniform float uPatternVariation;
+uniform float uPatternSaturation;
+uniform float uPatternEdge;
+uniform float uPatternDensity;
+uniform float uPatternTwill;
+uniform float uPatternBond;
+uniform float uPatternRows;
+
+vec3 patternP(vec2 pMm, float z) {
+  return buildP(pMm, z, uFillScale, uFillAngle, uPatternSeed, uPatternDepthScale);
+}
+// 3-stop ramp C2 -> mid -> C1 (dark line/mortar -> accent -> main).
+vec3 patRamp(float t) {
+  vec3 s[MAX_STOPS];
+  s[0] = uFillC2; s[1] = uPatternColorMid; s[2] = uFillC1;
+  s[3] = uFillC1; s[4] = uFillC1; s[5] = uFillC1;
+  return rampN(s, 3, t);
+}
+
+// --- Primitive: weave interlace (plain or 2x2 twill) ---
+struct Weave { float sh; float cov; float warpTop; float crown; float sid; };
+Weave weave(vec2 uv, float twill) {
+  vec2 cell = floor(uv);
+  vec2 f = fract(uv) - 0.5;
+  float i = cell.x, j = cell.y;
+  float top = (twill < 0.5) ? step(mod(i + j, 2.0), 0.5)      // plain weave
+                            : step(mod(i - j, 4.0), 1.5);      // 2x2 twill / carbon
+  float gap = mix(0.30, 0.12, uPatternContrast);
+  float mx = smoothstep(0.5, 0.5 - gap, abs(f.x));            // inside warp column
+  float my = smoothstep(0.5, 0.5 - gap, abs(f.y));            // inside weft row
+  float warpH = mx * (0.5 + 0.5 * cos(f.x * 3.14159));
+  float weftH = my * (0.5 + 0.5 * cos(f.y * 3.14159));
+  float lift = 0.45;
+  warpH += top * lift * mx;
+  weftH += (1.0 - top) * lift * my;
+  float over  = (top > 0.5) ? warpH : weftH;
+  float under = (top > 0.5) ? weftH : warpH;
+  Weave w;
+  w.sh = over - under;                                        // signed: over up, under down
+  w.cov = max(mx, my);
+  w.warpTop = top;
+  w.crown = over;
+  w.sid = (top > 0.5) ? fract(sin(i * 12.9) * 43758.5) : fract(sin(j * 78.2) * 43758.5);
+  return w;
+}
+
+// --- Primitive: offset brick lattice ---
+struct Brick { float id; vec2 local; float mortar; };
+Brick brickLattice(vec2 uv, float bond, float mortar, float aspect) {
+  float row = floor(uv.y);
+  float off = mod(row, 2.0) * bond;
+  float bx = uv.x / aspect + off;
+  vec2 cell = vec2(floor(bx), row);
+  vec2 local = vec2(fract(bx), fract(uv.y));
+  float mwX = max(mortar, 1e-3), mwY = max(mortar * aspect, 1e-3);
+  float ex = min(smoothstep(0.0, mwX, local.x), smoothstep(0.0, mwX, 1.0 - local.x));
+  float ey = min(smoothstep(0.0, mwY, local.y), smoothstep(0.0, mwY, 1.0 - local.y));
+  Brick b;
+  b.id = fract(dot(cell, vec2(127.1, 311.7)));
+  b.local = local;
+  b.mortar = 1.0 - min(ex, ey);                              // 1 inside mortar groove
+  return b;
+}
+
+// Structured / organic scale cell. Structured mode tiles overlapping scallops:
+// scale centers on an offset lattice, each a squashed circle (wider than tall);
+// a pixel is owned by the FRONTMOST scale covering it (smallest center.y), so the
+// upper rows overlap the lower ones exactly like fish scales / roof shingles.
+// s.t = 0 at the owning scale's center, 1 at its rim (drives arcs + crown).
+struct Scale { float dome; float edge; float id; float t; };
+const float SCALE_H = 0.52;     // row vertical spacing (world units of the density grid)
+const float SCALE_R = 0.9;      // scallop radius; > H+overlap so rows cover fully
+const float SCALE_SQ = 1.45;    // vertical squash -> scales a touch wider than tall
+Scale scaleCell(vec3 P) {
+  Scale s;
+  if (uPatternRows < 0.5) {                                   // organic (Voronoi)
+    Voro v = voronoi3(P * uPatternDensity);
+    s.dome = smoothstep(0.55, 0.0, v.f1);
+    s.edge = smoothstep(uPatternEdge, 0.0, v.f2 - v.f1);
+    s.id = v.id;
+    s.t = clamp(v.f1 / 0.55, 0.0, 1.0);
+    return s;
+  }
+  // Structured overlapping scallops. Walk rows front-to-back (highest first);
+  // the first row whose nearest scale covers the pixel owns it, so upper rows
+  // cleanly overlap the lower ones. Each scale is a circle squashed vertically.
+  vec2 uv = P.xy * uPatternDensity;
+  float baseRow = floor(uv.y / SCALE_H);
+  for (int dr = -2; dr <= 1; dr++) {                          // -2 = frontmost (smallest center.y)
+    float r = baseRow + float(dr);
+    float off = mod(r, 2.0) * 0.5;                            // alternate rows offset by half
+    float k = floor(uv.x - off);                             // nearest column index in this row
+    vec2 c = vec2(k + 0.5 + off, (r + 1.0) * SCALE_H);        // its center
+    vec2 d = (uv - c) * vec2(1.0, SCALE_SQ);
+    float dist = length(d);
+    if (dist < SCALE_R) {                                     // frontmost covering scale wins
+      s.t = dist / SCALE_R;
+      s.dome = 1.0 - smoothstep(0.2, 1.0, s.t);               // rounded crown -> rim
+      s.edge = smoothstep(uPatternEdge, 0.0, SCALE_R - dist); // dark separation at the rim
+      s.id = fract(dot(vec2(k, r), vec2(127.1, 311.7)));
+      return s;
+    }
+  }
+  s.t = 1.0; s.dome = 0.0; s.edge = 1.0; s.id = 0.0;          // uncovered sliver -> seam
+  return s;
+}
+
+vec3 patLeather(vec3 P) {
+  Voro v = voronoi3(P * uPatternDensity);
+  // Soft, shallow creases between rounded pebbles (not hard cracks).
+  float crease = smoothstep(uPatternEdge, 0.0, v.f2 - v.f1);
+  float dome = smoothstep(0.6, 0.05, v.f1);                  // pebble crown (bright center)
+  vec3 col = patRamp(mix(0.5, v.id, uPatternVariation));
+  col *= 0.9 + 0.14 * fbm3(P * 3.0, 4);                      // fine leather grain within pebbles
+  col *= 1.0 + 0.12 * dome;                                  // gentle sheen on crowns
+  col = mix(col, col * 0.5, crease * (0.35 + 0.35 * uPatternContrast)); // darken creases softly
+  return col;
+}
+vec3 patWoven(vec3 P) {
+  Weave w = weave(P.xy * uPatternDensity, uPatternTwill);
+  vec3 strand = (w.warpTop > 0.5) ? uFillC1 : uFillC2;
+  strand = mix(strand, uPatternColorMid, w.sid * uPatternVariation);
+  strand *= 0.82 + 0.30 * w.crown;
+  return mix(uFillC2 * 0.4, strand, w.cov);
+}
+vec3 patBrick(vec3 P) {
+  Brick b = brickLattice(P.xy * uPatternDensity, uPatternBond, uPatternEdge, 2.0);
+  vec3 brick = mix(uFillC1, uFillC2, b.id * uPatternVariation);
+  brick *= 0.9 + 0.2 * fbm3(P * 22.0, 3);
+  return mix(brick, uPatternColorMid, b.mortar);
+}
+vec3 patScales(vec3 P) {
+  Scale s = scaleCell(P);
+  vec3 col = patRamp(mix(0.5, s.id, uPatternVariation));
+  float rings = 0.5 + 0.5 * cos(s.t * 16.0);                 // concentric growth arcs
+  col *= 0.9 + 0.1 * rings * (1.0 - s.t);
+  col *= 0.68 + 0.42 * s.dome;                               // crown highlight -> shaded rim
+  col = mix(col, uFillC2 * 0.5, s.edge * 0.7);               // dark separation line
+  return col;
+}
+
+vec3 evalPattern(vec2 pMm, float z) {
+  vec3 P = patternP(pMm, z);
+  vec3 col;
+  if (uPatternType < 0.5) col = patLeather(P);
+  else if (uPatternType < 1.5) col = patWoven(P);
+  else if (uPatternType < 2.5) col = patBrick(P);
+  else col = patScales(P);
+  float lum = dot(col, vec3(0.299, 0.587, 0.114));
+  col = mix(vec3(lum), col, uPatternSaturation);
+  return clamp(col, 0.0, 1.0);
+}
+// Signed relief: creases/mortar carve down, pebbles/scale crowns rise, weave both.
+float patternReliefMask(vec2 pMm, float z) {
+  vec3 P = patternP(pMm, z);
+  if (uPatternType < 0.5) {
+    Voro v = voronoi3(P * uPatternDensity);
+    return -smoothstep(uPatternEdge, 0.0, v.f2 - v.f1);
+  }
+  if (uPatternType < 1.5) return weave(P.xy * uPatternDensity, uPatternTwill).sh;
+  if (uPatternType < 2.5) return -brickLattice(P.xy * uPatternDensity, uPatternBond, uPatternEdge, 2.0).mortar;
+  return scaleCell(P).dome;
+}
+`;
+
+/**
+ * Procedural fill evaluated in canvas XY (mm): solid color, volumetric wood,
+ * volumetric stone, or a tiling pattern. Shared by the background, border and
+ * model color shaders.
  * `evalFill(pMm, z)` takes a Z (height) for the volumetric materials; the
  * `evalFill(pMm)` overload passes z = 0 (flat parts, e.g. background/border).
- * `materialReliefMask` returns the (unsigned) height perturbation for the depth
- * micro-relief pass.
+ * `materialReliefMask` returns the SIGNED height perturbation for the depth
+ * micro-relief pass (positive = proud, negative = recessed).
  */
 export const GLSL_FILL = /* glsl */ `
-uniform float uFillType;  // 0 solid, 1 wood, 2 stone
+uniform float uFillType;  // 0 solid, 1 wood, 2 stone, 3 pattern
 uniform vec3 uFillC1;
 uniform vec3 uFillC2;
 uniform float uFillScale; // feature size (mm)
@@ -496,15 +674,18 @@ uniform float uFillAngle; // radians
 ${GLSL_CORE}
 ${GLSL_WOOD}
 ${GLSL_STONE}
+${GLSL_PATTERN}
 vec3 evalFill(vec2 pMm, float z) {
   if (uFillType < 0.5) return uFillC1;              // solid
   if (uFillType < 1.5) return evalWood(pMm, z);     // volumetric wood
-  return generateStone(pMm, z);                     // volumetric stone
+  if (uFillType < 2.5) return generateStone(pMm, z);// volumetric stone
+  return evalPattern(pMm, z);                       // tiling pattern
 }
 vec3 evalFill(vec2 pMm) { return evalFill(pMm, 0.0); }
 float materialReliefMask(vec2 pMm, float z) {
-  if (uFillType < 1.5) return woodGrainLine(pMm, z); // wood grooves
-  return stoneReliefMask(pMm, z);                    // stone veins/voids/cracks
+  if (uFillType < 1.5) return woodGrainLine(pMm, z);   // wood grooves (recessed)
+  if (uFillType < 2.5) return stoneReliefMask(pMm, z); // stone veins/voids/cracks
+  return patternReliefMask(pMm, z);                    // pattern creases/mortar/domes/weave
 }
 `;
 
@@ -695,7 +876,6 @@ uniform float uDetail;      // unsharp amount
 uniform float uGamma;       // depth curve
 uniform vec2 uSizeMm;         // canvas size (mm), for the material micro-relief coords
 uniform float uMatReliefAmount; // material micro-relief amount (0 = off)
-uniform float uMatReliefSign;   // +1 = proud (veins), -1 = recessed (grooves/voids/cracks)
 ${GLSL_FILL}
 void main() {
   float range = max(uStretchMax - uStretchMin, 1e-5);
@@ -710,13 +890,13 @@ void main() {
   float g = pow(d, uGamma);                            // depth curve
 
   // Optional material micro-relief: perturb the normalized height by the
-  // material's relief mask (wood grooves, marble veins proud, travertine voids /
-  // cracks recessed). Applied before the [min,max] remap and clamped to [0,1] so
-  // the overall relief stays intact and within the printable range. The Z fed to
-  // the mask matches the color pass (raw normalized model height).
+  // material's SIGNED relief mask (wood grooves / mortar recessed, marble veins /
+  // scale crowns proud, weave both ways). Applied before the [min,max] remap and
+  // clamped to [0,1] so the overall relief stays intact and within the printable
+  // range. The Z fed to the mask matches the color pass (raw normalized height).
   if (uMatReliefAmount > 0.0) {
     float mask = materialReliefMask(vUv * uSizeMm, texture2D(uModel, vUv).r);
-    g = clamp(g + uMatReliefSign * mask * uMatReliefAmount, 0.0, 1.0);
+    g = clamp(g + mask * uMatReliefAmount, 0.0, 1.0);
   }
   // Edge feather (constant-angle limit): recover distance-from-edge from the
   // blurred coverage (~(cov-0.5)*sigma*sqrt(2pi)); with the feather blur sized

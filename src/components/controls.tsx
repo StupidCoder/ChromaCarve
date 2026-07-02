@@ -1,11 +1,15 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
+  defaultPatternParams,
   defaultStoneParams,
   defaultWoodParams,
+  PATTERN_PRESETS,
   STONE_PRESETS,
   WOOD_PRESETS,
   type Fill,
   type MicroRelief,
+  type PatternParams,
+  type PatternType,
   type StoneParams,
   type StoneType,
   type WoodMode,
@@ -254,38 +258,23 @@ function MicroReliefEditor({
   label,
   micro,
   onChange,
-  lockMode,
 }: {
   label: string;
   micro: MicroRelief;
   onChange: (m: MicroRelief) => void;
-  lockMode?: boolean;
 }) {
   return (
     <>
       <Toggle label={label} checked={micro.enabled} onChange={(v) => onChange({ ...micro, enabled: v })} />
       {micro.enabled && (
-        <>
-          <Slider
-            label="Micro-relief amount"
-            value={micro.amount}
-            min={0}
-            max={0.25}
-            step={0.005}
-            onChange={(v) => onChange({ ...micro, amount: v })}
-          />
-          {!lockMode && (
-            <Select
-              label="Micro-relief mode"
-              value={micro.mode}
-              options={[
-                { value: 'add', label: 'Proud (raised)' },
-                { value: 'subtract', label: 'Recessed (grooves)' },
-              ]}
-              onChange={(m) => onChange({ ...micro, mode: m as 'add' | 'subtract' })}
-            />
-          )}
-        </>
+        <Slider
+          label="Micro-relief amount"
+          value={micro.amount}
+          min={0}
+          max={0.25}
+          step={0.005}
+          onChange={(v) => onChange({ ...micro, amount: v })}
+        />
       )}
     </>
   );
@@ -505,7 +494,6 @@ function WoodEditor({ fill, onChange }: { fill: Fill; onChange: (fill: Fill) => 
         label="Emboss grain into depth (micro-relief)"
         micro={wood.microRelief}
         onChange={(m) => setWood({ microRelief: m })}
-        lockMode
       />
     </>
   );
@@ -665,6 +653,108 @@ function StoneEditor({ fill, onChange }: { fill: Fill; onChange: (fill: Fill) =>
   );
 }
 
+/** Labels for the two main colors + mid color, per pattern family. */
+const PATTERN_COLOR_LABELS: Record<PatternType, [string, string, string]> = {
+  leather: ['Leather', 'Crease shadow', 'Mid tone'],
+  woven: ['Warp thread', 'Weft thread', 'Sheen'],
+  brick: ['Brick', 'Brick (dark)', 'Mortar'],
+  scales: ['Scale', 'Scale (dark)', 'Scale mid'],
+};
+
+function PatternEditor({ fill, onChange }: { fill: Fill; onChange: (fill: Fill) => void }) {
+  const p = fill.pattern ?? defaultPatternParams();
+  const setFill = (patch: Partial<Fill>) => onChange({ ...fill, ...patch });
+  const setP = (patch: Partial<PatternParams>) => onChange({ ...fill, pattern: { ...p, ...patch } });
+  const t = p.patternType;
+  const [c1Label, c2Label, midLabel] = PATTERN_COLOR_LABELS[t];
+  return (
+    <>
+      <Select
+        label="Pattern"
+        value={t}
+        options={[
+          { value: 'leather', label: 'Leather' },
+          { value: 'woven', label: 'Woven' },
+          { value: 'brick', label: 'Brick' },
+          { value: 'scales', label: 'Scales' },
+        ]}
+        onChange={(v) => setP({ patternType: v as PatternType })}
+      />
+
+      <ColorField label={c1Label} value={fill.color1} onChange={(c) => setFill({ color1: c })} />
+      <ColorField label={c2Label} value={fill.color2} onChange={(c) => setFill({ color2: c })} />
+      <ColorField label={midLabel} value={p.colorMid} onChange={(c) => setP({ colorMid: c })} />
+
+      <NumberField label="Tile size (mm)" value={fill.scaleMm} min={0.5} step={1} onChange={(v) => setFill({ scaleMm: v })} />
+      <Slider
+        label="Orientation"
+        value={fill.angle}
+        min={0}
+        max={180}
+        step={1}
+        format={(v) => `${Math.round(v)}°`}
+        onChange={(v) => setFill({ angle: v })}
+      />
+      <Slider label="Density" value={p.density} min={5} max={50} step={1} onChange={(v) => setP({ density: v })} />
+      <Slider
+        label={t === 'brick' ? 'Mortar / edge width' : 'Edge / crease width'}
+        value={p.edgeWidth}
+        min={0.01}
+        max={0.25}
+        step={0.005}
+        onChange={(v) => setP({ edgeWidth: v })}
+      />
+      <Slider label="Contrast" value={p.contrast} min={0} max={1} step={0.05} onChange={(v) => setP({ contrast: v })} />
+      <Slider label="Tint variation" value={p.variation} min={0} max={1} step={0.05} onChange={(v) => setP({ variation: v })} />
+      <Slider label="Saturation" value={p.saturation} min={0} max={1.2} step={0.02} onChange={(v) => setP({ saturation: v })} />
+
+      {/* Conditional per-family knobs */}
+      {t === 'woven' && (
+        <Select
+          label="Weave"
+          value={p.twill < 0.5 ? 'plain' : 'twill'}
+          options={[
+            { value: 'plain', label: 'Plain weave' },
+            { value: 'twill', label: '2×2 twill (carbon)' },
+          ]}
+          onChange={(v) => setP({ twill: v === 'twill' ? 1 : 0 })}
+        />
+      )}
+      {t === 'brick' && (
+        <Slider
+          label="Bond offset"
+          value={p.bond}
+          min={0}
+          max={0.5}
+          step={0.05}
+          format={(v) => (v >= 0.45 ? 'Running' : v <= 0.05 ? 'Stacked' : v.toFixed(2))}
+          onChange={(v) => setP({ bond: v })}
+        />
+      )}
+      {t === 'scales' && (
+        <Select
+          label="Layout"
+          value={p.rows < 0.5 ? 'organic' : 'rows'}
+          options={[
+            { value: 'organic', label: 'Organic' },
+            { value: 'rows', label: 'Structured rows' },
+          ]}
+          onChange={(v) => setP({ rows: v === 'rows' ? 1 : 0 })}
+        />
+      )}
+
+      <Slider label="Depth scale (slicing)" value={p.depthScale} min={0} max={1.5} step={0.05} onChange={(v) => setP({ depthScale: v })} />
+
+      <SeedField value={p.seed} onChange={(v) => setP({ seed: v })} />
+      <MicroReliefEditor
+        label="Emboss pattern into depth (micro-relief)"
+        micro={p.microRelief}
+        onChange={(m) => setP({ microRelief: m })}
+      />
+    </>
+  );
+}
+
 export function FillEditor({
   label,
   fill,
@@ -689,11 +779,15 @@ export function FillEditor({
     ['sandstone', 'Sandstone'], ['granite', 'Granite'], ['terrazzo', 'Terrazzo'],
     ['travertine', 'Travertine'], ['cracked', 'Cracked'],
   ];
+  const PATTERN_ITEMS: [string, string][] = [
+    ['leather', 'Leather'], ['woven', 'Woven'], ['brick', 'Brick'], ['scales', 'Scales'],
+  ];
   const selValue = fill.preset ?? (fill.type === 'solid' ? 'solid' : '');
   const applySelection = (v: string) => {
     if (v === 'solid') onChange({ ...fill, type: 'solid', preset: 'solid' });
     else if (v.startsWith('wood:')) onChange({ ...WOOD_PRESETS[v.slice(5)](), preset: v });
     else if (v.startsWith('stone:')) onChange({ ...STONE_PRESETS[v.slice(6)](), preset: v });
+    else if (v.startsWith('pattern:')) onChange({ ...PATTERN_PRESETS[v.slice(8)](), preset: v });
   };
 
   return (
@@ -712,6 +806,11 @@ export function FillEditor({
               <option key={k} value={`stone:${k}`}>{lbl}</option>
             ))}
           </optgroup>
+          <optgroup label="Others">
+            {PATTERN_ITEMS.map(([k, lbl]) => (
+              <option key={k} value={`pattern:${k}`}>{lbl}</option>
+            ))}
+          </optgroup>
         </select>
       </div>
 
@@ -719,12 +818,14 @@ export function FillEditor({
         <ColorField label="Color" value={fill.color1} onChange={(c) => set({ color1: c })} />
       )}
 
-      {(fill.type === 'wood' || fill.type === 'stone') && (
+      {(fill.type === 'wood' || fill.type === 'stone' || fill.type === 'pattern') && (
         <Panel title="Advanced settings" defaultOpen={false}>
           {fill.type === 'wood' ? (
             <WoodEditor fill={fill} onChange={onChange} />
-          ) : (
+          ) : fill.type === 'stone' ? (
             <StoneEditor fill={fill} onChange={onChange} />
+          ) : (
+            <PatternEditor fill={fill} onChange={onChange} />
           )}
         </Panel>
       )}

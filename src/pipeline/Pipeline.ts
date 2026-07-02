@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { ModelAsset } from '../assets/assetStore';
 import type { Fill, ModelSettings, Project } from '../state/store';
-import { defaultStoneParams, defaultWoodParams, outputResolution } from '../state/store';
+import { defaultPatternParams, defaultStoneParams, defaultWoodParams, outputResolution } from '../state/store';
 import { getImageAsset } from '../assets/assetStore';
 import { ModelDepthPass } from '../obj/ModelDepthPass';
 import { resolveModel } from '../obj/modelSource';
@@ -36,7 +36,7 @@ function hexToRgb(hex: string): [number, number, number] {
   return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
 }
 
-const FILL_TYPE_ID: Record<Fill['type'], number> = { solid: 0, wood: 1, stone: 2 };
+const FILL_TYPE_ID: Record<Fill['type'], number> = { solid: 0, wood: 1, stone: 2, pattern: 3 };
 
 const STONE_TYPE_ID: Record<string, number> = {
   marble: 0,
@@ -47,6 +47,8 @@ const STONE_TYPE_ID: Record<string, number> = {
   travertine: 5,
   cracked: 6,
 };
+
+const PATTERN_TYPE_ID: Record<string, number> = { leather: 0, woven: 1, brick: 2, scales: 3 };
 
 const MAX_STOPS = 6;
 
@@ -126,6 +128,19 @@ function fillUniformDefs(): Record<string, THREE.IUniform> {
     uStrataDensity: { value: 3 },
     uStrataAxis: { value: 0 },
     uStrataWaviness: { value: 0.4 },
+    // Tiling-pattern params (used when uFillType === 3).
+    uPatternType: { value: 0 },
+    uPatternDepthScale: { value: 0.3 },
+    uPatternSeed: { value: new THREE.Vector3() },
+    uPatternColorMid: { value: new THREE.Color() },
+    uPatternContrast: { value: 0.5 },
+    uPatternVariation: { value: 0.4 },
+    uPatternSaturation: { value: 0.9 },
+    uPatternEdge: { value: 0.06 },
+    uPatternDensity: { value: 6 },
+    uPatternTwill: { value: 0 },
+    uPatternBond: { value: 0.5 },
+    uPatternRows: { value: 1 },
   };
 }
 
@@ -268,7 +283,6 @@ export class Pipeline {
         uGamma: { value: 1 },
         uSizeMm: { value: new THREE.Vector2() },
         uMatReliefAmount: { value: 0 },
-        uMatReliefSign: { value: -1 },
         ...fillUniformDefs(), // for the material micro-relief mask function
       }),
       tile: new THREE.ShaderMaterial({
@@ -431,6 +445,21 @@ export class Pipeline {
     u.uStrataDensity.value = s.strataDensity;
     u.uStrataAxis.value = s.strataAxis;
     u.uStrataWaviness.value = s.strataWaviness;
+
+    // Tiling-pattern params (used when uFillType === 3).
+    const p = fill.pattern ?? defaultPatternParams();
+    u.uPatternType.value = PATTERN_TYPE_ID[p.patternType] ?? 0;
+    u.uPatternDepthScale.value = p.depthScale;
+    seedToVec3(p.seed, u.uPatternSeed.value as THREE.Vector3);
+    (u.uPatternColorMid.value as THREE.Color).set(...(hexToRgb(p.colorMid) as [number, number, number]));
+    u.uPatternContrast.value = p.contrast;
+    u.uPatternVariation.value = p.variation;
+    u.uPatternSaturation.value = p.saturation;
+    u.uPatternEdge.value = p.edgeWidth;
+    u.uPatternDensity.value = p.density;
+    u.uPatternTwill.value = p.twill;
+    u.uPatternBond.value = p.bond;
+    u.uPatternRows.value = p.rows;
   }
 
   /** Sample the border profile spline into the 1D lookup texture. */
@@ -973,10 +1002,11 @@ export class Pipeline {
         ? (model.fill.wood ?? defaultWoodParams()).microRelief
         : model.fill.type === 'stone'
           ? (model.fill.stone ?? defaultStoneParams()).microRelief
-          : null;
+          : model.fill.type === 'pattern'
+            ? (model.fill.pattern ?? defaultPatternParams()).microRelief
+            : null;
     const reliefOn = !!micro && micro.enabled && micro.amount > 0;
     md.uniforms.uMatReliefAmount.value = reliefOn ? micro!.amount : 0;
-    md.uniforms.uMatReliefSign.value = micro && micro.mode === 'add' ? 1 : -1;
     if (reliefOn) {
       this.setFill(md, model.fill);
       const heightMm = widthMm * (this.height / Math.max(this.width, 1));
