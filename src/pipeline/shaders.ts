@@ -257,13 +257,71 @@ float woodTone(vec3 q) {
   return clamp(strong * 0.9 + fine, 0.0, 1.0);
 }
 
-// Latewood mask at a point — reused to emboss depth micro-grooves.
+// --- Figured grain (uWoodMode == 2): warped-noise flow with knots/flame, instead
+// of concentric rings. Technique inspired by dean_the_coder's Shadertoy
+// 'Procedural Wood' (CC BY-NC-SA); independently reimplemented here on a generic
+// value-noise + the shared simplex core, recolorable via the 3 wood stops.
+// Generic value noise (crisp, grid-aligned detail the smooth simplex can't give).
+float woodVHash(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+float woodVNoise(vec3 x) {
+  vec3 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(woodVHash(i + vec3(0,0,0)), woodVHash(i + vec3(1,0,0)), f.x),
+                 mix(woodVHash(i + vec3(0,1,0)), woodVHash(i + vec3(1,1,0)), f.x), f.y),
+             mix(mix(woodVHash(i + vec3(0,0,1)), woodVHash(i + vec3(1,0,1)), f.x),
+                 mix(woodVHash(i + vec3(0,1,1)), woodVHash(i + vec3(1,1,1)), f.x), f.y), f.z);
+}
+float woodVFbm(vec3 p, int oct) { float s=0.0,a=0.5,t=0.0; for (int i=0;i<8;i++){ if(i>=oct) break; s+=a*woodVNoise(p); t+=a; a*=0.5; p*=2.0; } return s/t; }
+// Signed spectral fbm (= dean_the_coder's musgraveFbm shape): un-normalized sum
+// with amplitude scaled by lacunarity^(-dimension). Low dimension => dense grit.
+float woodMusgN(vec3 p, float oct, float dim, float lac) {
+  float s = 0.0, a = 1.0, m = pow(lac, -dim);
+  for (int i = 0; i < 16; i++) { if (float(i) >= oct) break; s += (woodVNoise(p) * 2.0 - 1.0) * a; a *= m; p *= lac; }
+  return s;
+}
+vec3 woodVWarp(vec3 p) { return vec3(woodVNoise(p + 17.1), woodVNoise(p + 51.7), woodVNoise(p + 83.3)) * 2.0 - 1.0; }
+float woodFbmDist(vec3 p) { p += woodVWarp(p) * 1.12; return woodVFbm(p, 8); }
+vec3 woodWaveFbmX(vec3 p) { float n = p.x * 20.0 + 0.4 * woodVFbm(p * 3.0, 3); return vec3(sin(n) * 0.5 + 0.5, p.yz); }
+float figRmap(float f, float a, float b) { return clamp((f - a) / (b - a), 0.0, 1.0); }
+// Faithful reimplementation of dean_the_coder's matWood tone (the algorithm:
+// structure + constants), rebuilt on ChromaCarve's own value noise. Domain-warped
+// flow -> dense flame-aligned banding -> dirt + fine grain. Returns ~[0,1] lightness.
+float figuredTone(vec3 P) {
+  float n1 = woodFbmDist(P * vec3(7.8, 1.17, 1.17));
+  n1 = mix(n1, 1.0, 0.13);
+  float n2 = mix(woodMusgN(vec3(n1 * 4.6), 8.0, 0.0, 2.5), n1, 0.85);
+  float dirt  = 1.0 - woodMusgN(woodWaveFbmX(P * vec3(0.01, 0.15, 0.15)), 15.0, 0.26, 2.4) * 0.4;
+  float grain = 1.0 - smoothstep(0.2, 1.0, woodMusgN(P * vec3(500.0, 6.0, 1.0), 2.0, 2.0, 2.5)) * 0.2;
+  return n2 * dirt * grain;
+}
+// Figured colour via the recolorable 3-stop palette (dark C2 -> mid -> light C1).
+// The stops are blended in LINEAR light (like the reference) then returned to
+// display space, so the midtones brighten the way real figured wood does.
+vec3 figuredColor(vec3 P) {
+  float n2 = figuredTone(P);
+  vec3 c2 = pow(uFillC2, vec3(2.2));
+  vec3 cm = pow(uWoodColorMid, vec3(2.2));
+  vec3 c1 = pow(uFillC1, vec3(2.2));
+  vec3 lin = mix(mix(c2, cm, figRmap(n2, 0.20, 0.58)), c1, figRmap(n2, 0.58, 1.02));
+  return pow(lin, vec3(1.0 / 2.2));
+}
+
+// Latewood / grain mask at a point — reused to emboss depth micro-grooves.
 float woodGrainLine(vec2 pMm, float z) {
-  return woodTone(woodBlockCoord(pMm, z));
+  vec3 q = woodBlockCoord(pMm, z);
+  if (uWoodMode > 1.5) return 1.0 - clamp(figuredTone(q * 0.25), 0.0, 1.0); // figured: dark grain = high mask
+  return woodTone(q);
 }
 
 vec3 evalWood(vec2 pMm, float z) {
   vec3 q = woodBlockCoord(pMm, z);
+
+  // Figured mode: warped-noise flow (knots/flame) instead of concentric rings.
+  if (uWoodMode > 1.5) {
+    vec3 fcol = figuredColor(q * 0.25);
+    float flum = dot(fcol, vec3(0.299, 0.587, 0.114));
+    return clamp(mix(vec3(flum), fcol, uWoodSaturation), 0.0, 1.0);
+  }
+
   float tone = woodTone(q);
 
   // Large-scale heart colour zoning (earlywood C1 <-> mid), amplitude = uWoodTint.

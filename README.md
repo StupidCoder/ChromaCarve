@@ -42,12 +42,14 @@ Output size is physical (mm + px/mm).
 Every part is textured with a **Fill**, evaluated procedurally in canvas space:
 
 - **Solid color.**
-- **Wood grain** — a volumetric model where grain lines are slices through concentric
-  growth-ring cylinders around a wandering pith axis, giving realistic cathedral flames,
-  irregular ring spacing, thin latewood lines, high-frequency pores and heart-colour
-  zoning. Species presets: **Walnut, Oak, Mahogany, Redwood, Poplar, Olive**. Knobs cover
-  ring density, pith depth/wander, grain turbulence, line sharpness, colour zoning, pores,
-  figure streak, per-ring variation and saturation, plus flat-sawn vs end-grain layout.
+- **Wood grain** — a volumetric model with three grain layouts: **flat-sawn** and
+  **end-grain**, where grain lines are slices through concentric growth-ring cylinders
+  around a wandering pith axis (realistic cathedral flames, irregular ring spacing, thin
+  latewood lines, high-frequency pores, heart-colour zoning); and **figured**, a
+  domain-warped-noise wood with dense fibrous grit and knots (see credits). Species
+  presets: **Walnut, Oak, Mahogany, Redwood, Poplar, Olive, Figured**. Knobs cover ring
+  density, pith depth/wander, grain turbulence, line sharpness, colour zoning, pores,
+  figure streak, per-ring variation and saturation.
 - **Stone** — volumetric **marble, onyx, sandstone, granite, terrazzo, travertine** and
   **cracked** stone (veins, strata, Voronoi aggregates/cracks), with curated presets.
 
@@ -102,3 +104,13 @@ with a specular highlight and a key light:
 - `src/spline/profile.ts` — Catmull-Rom profile sampling for the frame LUT.
 - `src/three/Viewer3D.tsx` — displacement mesh, in-shader normals, key light + specular.
 - `src/io/` — PNG (`fast-png`) and project-JSON export/import.
+
+## Credits
+
+- The **figured** wood grain layout is an independent reimplementation of the technique in
+  [dean_the_coder](https://twitter.com/deanthecoder)'s "Procedural Wood" shader
+  ([shadertoy.com/view/mdy3R1](https://www.shadertoy.com/view/mdy3R1)) — domain-warped noise
+  flow with a spectral-fBm tone transfer and fine anisotropic grain. Its **algorithm** was
+  reimplemented here on ChromaCarve's own noise primitives and code (no source was copied);
+  the original shader is licensed CC BY-NC-SA 3.0. With thanks to the author.
+- 3D simplex noise: Ashima Arts / Stefan Gustavson (MIT, webgl-noise).

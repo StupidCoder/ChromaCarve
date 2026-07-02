@@ -368,7 +368,7 @@ export class Pipeline {
     // back to defaults so they still render).
     const w = fill.wood ?? defaultWoodParams();
     u.uWoodDepthScale.value = w.depthScale;
-    u.uWoodMode.value = w.mode === 'rings' ? 1 : 0;
+    u.uWoodMode.value = w.mode === 'figured' ? 2 : w.mode === 'rings' ? 1 : 0;
     u.uWoodRingDensity.value = w.ringDensity;
     u.uWoodPithDepth.value = w.pithDepth;
     (u.uWoodWarpCoarse.value as THREE.Vector2).set(w.warpCoarseFreq, w.warpCoarseAmp);

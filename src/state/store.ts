@@ -8,7 +8,7 @@ import { create } from 'zustand';
 export type FillType = 'solid' | 'wood' | 'stone';
 
 /** Grain layout for the volumetric wood material. */
-export type WoodMode = 'bands' | 'rings';
+export type WoodMode = 'bands' | 'rings' | 'figured';
 
 /**
  * Depth-map micro-relief shared by the volumetric materials: emboss the
@@ -197,6 +197,9 @@ export interface Fill {
   wood?: WoodParams;
   /** Volumetric-stone parameters (only used when `type === 'stone'`). */
   stone?: StoneParams;
+  /** UI hint: which entry in the grouped fill picker this fill came from
+   * (e.g. 'solid', 'wood:walnut', 'stone:carrara'). Not used by the renderer. */
+  preset?: string;
 }
 
 export function solidFill(color: string): Fill {
@@ -354,6 +357,25 @@ export const WOOD_PRESETS: Record<string, () => Fill> = {
       streakStrength: 0.3,
       fleckStrength: 0.35,
       saturation: 0.7, // pale, desaturated
+    },
+  }),
+  figured: () => ({
+    type: 'wood',
+    // Warped-flow figured wood (grain layout 'figured'). Display colours = the
+    // gamma-mapped equivalent of dean_the_coder's linear palette, so the
+    // (gamma-free) figured shader reproduces the reference cream/dark look.
+    color1: '#bd9878', // earlywood / bright figure (cream)
+    color2: '#342215', // latewood / knot line (near-black)
+    scaleMm: 26,
+    turbulence: 0.6,
+    angle: 0,
+    wood: {
+      ...defaultWoodParams(),
+      mode: 'figured',
+      colorMid: '#885d3e',
+      depthScale: 0.5,
+      saturation: 1.0,
+      seed: 3, // a bright, well-figured region of the noise field
     },
   }),
 };

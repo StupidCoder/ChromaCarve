@@ -5,7 +5,6 @@ import {
   STONE_PRESETS,
   WOOD_PRESETS,
   type Fill,
-  type FillType,
   type MicroRelief,
   type StoneParams,
   type StoneType,
@@ -352,22 +351,6 @@ function WoodEditor({ fill, onChange }: { fill: Fill; onChange: (fill: Fill) => 
   const setWood = (patch: Partial<WoodParams>) => onChange({ ...fill, wood: { ...wood, ...patch } });
   return (
     <>
-      <Select
-        label="Preset"
-        value={'custom'}
-        options={[
-          { value: 'custom', label: 'Custom…' },
-          { value: 'walnut', label: 'Walnut' },
-          { value: 'oak', label: 'Oak' },
-          { value: 'mahogany', label: 'Mahogany' },
-          { value: 'redwood', label: 'Redwood' },
-          { value: 'poplar', label: 'Poplar' },
-          { value: 'olive', label: 'Olive (figured)' },
-        ]}
-        onChange={(k) => {
-          if (k !== 'custom') onChange(WOOD_PRESETS[k]());
-        }}
-      />
       <ColorField label="Earlywood (light)" value={fill.color1} onChange={(c) => setFill({ color1: c })} />
       <ColorField label="Mid tone" value={wood.colorMid} onChange={(c) => setWood({ colorMid: c })} />
       <ColorField label="Latewood (dark)" value={fill.color2} onChange={(c) => setFill({ color2: c })} />
@@ -402,6 +385,7 @@ function WoodEditor({ fill, onChange }: { fill: Fill; onChange: (fill: Fill) => 
         options={[
           { value: 'bands', label: 'Bands (flat-sawn)' },
           { value: 'rings', label: 'Rings (end-grain)' },
+          { value: 'figured', label: 'Figured (warp)' },
         ]}
         onChange={(m) => setWood({ mode: m as WoodMode })}
       />
@@ -541,26 +525,6 @@ function StoneEditor({ fill, onChange }: { fill: Fill; onChange: (fill: Fill) =>
   const usesVoronoi = t === 'granite' || t === 'terrazzo' || t === 'travertine' || t === 'cracked';
   return (
     <>
-      <Select
-        label="Preset"
-        value={'custom'}
-        options={[
-          { value: 'custom', label: 'Custom…' },
-          { value: 'carrara', label: 'Carrara marble' },
-          { value: 'calacatta', label: 'Calacatta marble' },
-          { value: 'neroMarquina', label: 'Nero Marquina' },
-          { value: 'verde', label: 'Verde (green)' },
-          { value: 'onyx', label: 'Onyx' },
-          { value: 'sandstone', label: 'Sandstone' },
-          { value: 'granite', label: 'Granite' },
-          { value: 'terrazzo', label: 'Terrazzo' },
-          { value: 'travertine', label: 'Travertine' },
-          { value: 'cracked', label: 'Cracked' },
-        ]}
-        onChange={(k) => {
-          if (k !== 'custom') onChange(STONE_PRESETS[k]());
-        }}
-      />
       <Select
         label="Stone type"
         value={t}
@@ -711,29 +675,58 @@ export function FillEditor({
   onChange: (fill: Fill) => void;
 }) {
   const set = (patch: Partial<Fill>) => onChange({ ...fill, ...patch });
+
+  // Grouped picker: Solid Color, then Wood grain / Stone headings with their
+  // presets as indented items. Selecting a preset applies it wholesale.
+  const WOOD_ITEMS: [string, string][] = [
+    ['walnut', 'Walnut'], ['oak', 'Oak'], ['mahogany', 'Mahogany'],
+    ['redwood', 'Redwood'], ['poplar', 'Poplar'], ['olive', 'Olive'],
+    ['figured', 'Figured'],
+  ];
+  const STONE_ITEMS: [string, string][] = [
+    ['carrara', 'Carrara marble'], ['calacatta', 'Calacatta marble'],
+    ['neroMarquina', 'Nero Marquina'], ['verde', 'Verde (green)'], ['onyx', 'Onyx'],
+    ['sandstone', 'Sandstone'], ['granite', 'Granite'], ['terrazzo', 'Terrazzo'],
+    ['travertine', 'Travertine'], ['cracked', 'Cracked'],
+  ];
+  const selValue = fill.preset ?? (fill.type === 'solid' ? 'solid' : '');
+  const applySelection = (v: string) => {
+    if (v === 'solid') onChange({ ...fill, type: 'solid', preset: 'solid' });
+    else if (v.startsWith('wood:')) onChange({ ...WOOD_PRESETS[v.slice(5)](), preset: v });
+    else if (v.startsWith('stone:')) onChange({ ...STONE_PRESETS[v.slice(6)](), preset: v });
+  };
+
   return (
     <>
-      <Select
-        label={label}
-        value={fill.type}
-        options={[
-          { value: 'solid', label: 'Solid color' },
-          { value: 'wood', label: 'Wood grain' },
-          { value: 'stone', label: 'Stone' },
-        ]}
-        onChange={(t) => {
-          // Populate the material params the first time this fill becomes wood/stone.
-          if (t === 'wood') onChange({ ...fill, type: 'wood', wood: fill.wood ?? defaultWoodParams() });
-          else if (t === 'stone') onChange({ ...fill, type: 'stone', stone: fill.stone ?? defaultStoneParams() });
-          else onChange({ ...fill, type: t as FillType });
-        }}
-      />
-      {fill.type === 'wood' ? (
-        <WoodEditor fill={fill} onChange={onChange} />
-      ) : fill.type === 'stone' ? (
-        <StoneEditor fill={fill} onChange={onChange} />
-      ) : (
+      <div className="field">
+        <div className="field__label"><span>{label}</span></div>
+        <select value={selValue} onChange={(e) => applySelection(e.target.value)}>
+          <option value="solid">Solid Color</option>
+          <optgroup label="Wood grain">
+            {WOOD_ITEMS.map(([k, lbl]) => (
+              <option key={k} value={`wood:${k}`}>{lbl}</option>
+            ))}
+          </optgroup>
+          <optgroup label="Stone">
+            {STONE_ITEMS.map(([k, lbl]) => (
+              <option key={k} value={`stone:${k}`}>{lbl}</option>
+            ))}
+          </optgroup>
+        </select>
+      </div>
+
+      {fill.type === 'solid' && (
         <ColorField label="Color" value={fill.color1} onChange={(c) => set({ color1: c })} />
+      )}
+
+      {(fill.type === 'wood' || fill.type === 'stone') && (
+        <Panel title="Advanced settings" defaultOpen={false}>
+          {fill.type === 'wood' ? (
+            <WoodEditor fill={fill} onChange={onChange} />
+          ) : (
+            <StoneEditor fill={fill} onChange={onChange} />
+          )}
+        </Panel>
       )}
     </>
   );
