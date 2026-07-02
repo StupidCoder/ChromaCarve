@@ -1,4 +1,4 @@
-import { loadImageFile, loadObjFile } from '../../assets/assetStore';
+import { loadImageFile, loadModelFile } from '../../assets/assetStore';
 import { BUNDLED_MODELS } from '../../obj/bundledModels';
 import { useProjectStore, type ModelSettings, type ModelSource } from '../../state/store';
 import { ObjRotationViewport } from '../ObjRotationViewport';
@@ -58,7 +58,7 @@ function ModelSourcePicker({
           value={model.source}
           onChange={(e) => setModel((m) => void (m.source = e.target.value as ModelSource))}
         >
-          <option value="obj">OBJ model</option>
+          <option value="obj">Your model</option>
           <optgroup label="Primitives">
             {PRIMITIVE_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>{o.label}</option>
@@ -72,18 +72,23 @@ function ModelSourcePicker({
         </select>
       </div>
       {model.source === 'obj' && (
-        <FileInput
-          label="Model (OBJ)"
-          accept=".obj"
-          fileName={model.assetRef}
-          onFile={(file) =>
-            guard(async () => {
-              const ref = await loadObjFile(file);
-              setModel((m) => void (m.assetRef = ref));
-              bumpAssets();
-            })
-          }
-        />
+        <>
+          <FileInput
+            label="Model (OBJ or STL)"
+            accept=".obj,.stl"
+            fileName={model.assetRef}
+            onFile={(file) =>
+              guard(async () => {
+                const ref = await loadModelFile(file);
+                setModel((m) => void (m.assetRef = ref));
+                bumpAssets();
+              })
+            }
+          />
+          <div className="muted">
+            Your model is processed locally in your browser — it is never uploaded to the cloud.
+          </div>
+        </>
       )}
       {(model.source !== 'obj' || model.assetRef) && (
         <>

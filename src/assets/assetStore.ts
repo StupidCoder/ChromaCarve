@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
+import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 
 /**
  * In-memory registry for binary assets (uploaded images / OBJ models). These
@@ -114,6 +115,17 @@ export function ensureBundledModel(source: string, url: string): void {
     .finally(() => loadingBundles.delete(ref));
 }
 
+/** Recompute normals, center the geometry at the origin, compute bounding sphere. */
+function centerAndFinalize(geo: THREE.BufferGeometry): THREE.BufferGeometry {
+  geo.computeVertexNormals();
+  geo.computeBoundingBox();
+  const center = new THREE.Vector3();
+  geo.boundingBox!.getCenter(center);
+  geo.translate(-center.x, -center.y, -center.z);
+  geo.computeBoundingSphere();
+  return geo;
+}
+
 /** Merge all meshes of an OBJ group into one centered position+normal geometry. */
 function mergeGroup(group: THREE.Object3D): THREE.BufferGeometry {
   group.updateMatrixWorld(true);
@@ -131,28 +143,33 @@ function mergeGroup(group: THREE.Object3D): THREE.BufferGeometry {
   });
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  geo.computeVertexNormals();
-  geo.computeBoundingBox();
-  const center = new THREE.Vector3();
-  geo.boundingBox!.getCenter(center);
-  geo.translate(-center.x, -center.y, -center.z);
-  geo.computeBoundingSphere();
-  return geo;
+  return centerAndFinalize(geo);
+}
+
+/** Register a parsed geometry under `name`, replacing any existing entry. */
+function registerModel(name: string, geometry: THREE.BufferGeometry): string {
+  if (geometry.getAttribute('position').count === 0) {
+    throw new Error(`No geometry found in ${name}.`);
+  }
+  models.get(name)?.geometry.dispose();
+  models.set(name, { geometry, radius: geometry.boundingSphere?.radius ?? 1 });
+  return name;
 }
 
 /** Parse an OBJ File, merge + center it, and register under its filename. */
 export async function loadObjFile(file: File): Promise<string> {
-  const text = await file.text();
-  const group = new OBJLoader().parse(text);
-  const geometry = mergeGroup(group);
-  if (geometry.getAttribute('position').count === 0) {
-    throw new Error(`No geometry found in ${file.name}.`);
-  }
-  const radius = geometry.boundingSphere?.radius ?? 1;
-  const existing = models.get(file.name);
-  if (existing) existing.geometry.dispose();
-  models.set(file.name, { geometry, radius });
-  return file.name;
+  return registerModel(file.name, mergeGroup(new OBJLoader().parse(await file.text())));
+}
+
+/** Parse an STL File (binary or ASCII), center it, and register under its filename. */
+export async function loadStlFile(file: File): Promise<string> {
+  const geometry = new STLLoader().parse(await file.arrayBuffer());
+  return registerModel(file.name, centerAndFinalize(geometry));
+}
+
+/** Load an uploaded model file, dispatching to the OBJ or STL loader by extension. */
+export async function loadModelFile(file: File): Promise<string> {
+  return /\.stl$/i.test(file.name) ? loadStlFile(file) : loadObjFile(file);
 }
 
 /** Load a File into an HTMLImageElement and register it under its filename. */
