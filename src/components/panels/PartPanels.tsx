@@ -56,7 +56,15 @@ function ModelSourcePicker({
         <div className="field__label"><span>Model</span></div>
         <select
           value={model.source}
-          onChange={(e) => setModel((m) => void (m.source = e.target.value as ModelSource))}
+          onChange={(e) =>
+            // Switching to a different model resets the gizmo orientation so the
+            // new model shows in its default pose (not the previous orbit).
+            setModel((m) => {
+              m.source = e.target.value as ModelSource;
+              m.rotationQuat = [0, 0, 0, 1];
+              m.roll = 0;
+            })
+          }
         >
           <option value="obj">Your model</option>
           <optgroup label="Primitives">
@@ -80,7 +88,11 @@ function ModelSourcePicker({
             onFile={(file) =>
               guard(async () => {
                 const ref = await loadModelFile(file);
-                setModel((m) => void (m.assetRef = ref));
+                setModel((m) => {
+                  m.assetRef = ref;
+                  m.rotationQuat = [0, 0, 0, 1]; // reset gizmo pose for the new model
+                  m.roll = 0;
+                });
                 bumpAssets();
               })
             }
