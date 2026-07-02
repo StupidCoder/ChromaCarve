@@ -563,7 +563,9 @@ export type ModelSource =
   | 'horse'
   | 'rose'
   | 'koi'
-  | 'trinity_knot';
+  | 'trinity_knot'
+  | 'roman_bust'
+  | 'lighthouse';
 
 export interface ModelSettings {
   /** Where the geometry comes from: a loaded OBJ or a procedural primitive. */

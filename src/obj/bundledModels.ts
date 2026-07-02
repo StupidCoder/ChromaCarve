@@ -15,6 +15,8 @@ export const BUNDLED_MODELS: BundledModel[] = [
   { source: 'rose', label: 'Rose', url: `${import.meta.env.BASE_URL}models/rose.msh` },
   { source: 'koi', label: 'Koi', url: `${import.meta.env.BASE_URL}models/koi.msh` },
   { source: 'trinity_knot', label: 'Trinity knot', url: `${import.meta.env.BASE_URL}models/trinity_knot.msh` },
+  { source: 'roman_bust', label: 'Roman bust', url: `${import.meta.env.BASE_URL}models/roman_bust.msh` },
+  { source: 'lighthouse', label: 'Lighthouse', url: `${import.meta.env.BASE_URL}models/lighthouse.msh` },
 ];
 
 export const BUNDLED_BY_SOURCE = new Map(BUNDLED_MODELS.map((m) => [m.source, m]));
