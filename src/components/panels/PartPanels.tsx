@@ -1,4 +1,5 @@
 import { loadImageFile, loadObjFile } from '../../assets/assetStore';
+import { BUNDLED_MODELS } from '../../obj/bundledModels';
 import { useProjectStore, type ModelSettings, type ModelSource } from '../../state/store';
 import { ObjRotationViewport } from '../ObjRotationViewport';
 import { SplineEditor } from '../SplineEditor';
@@ -18,8 +19,7 @@ function guard(load: () => Promise<void>) {
   load().catch((e) => alert(String(e instanceof Error ? e.message : e)));
 }
 
-const MODEL_OPTIONS: { value: ModelSource; label: string }[] = [
-  { value: 'obj', label: 'OBJ file' },
+const PRIMITIVE_OPTIONS: { value: ModelSource; label: string }[] = [
   { value: 'torus', label: 'Torus' },
   { value: 'sphere', label: 'Sphere' },
   { value: 'torusknot', label: 'Torus knot' },
@@ -52,12 +52,25 @@ function ModelSourcePicker({
   }
   return (
     <>
-      <Select
-        label="Model"
-        value={model.source}
-        options={MODEL_OPTIONS}
-        onChange={(s) => setModel((m) => void (m.source = s))}
-      />
+      <div className="field">
+        <div className="field__label"><span>Model</span></div>
+        <select
+          value={model.source}
+          onChange={(e) => setModel((m) => void (m.source = e.target.value as ModelSource))}
+        >
+          <option value="obj">OBJ model</option>
+          <optgroup label="Primitives">
+            {PRIMITIVE_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </optgroup>
+          <optgroup label="Models">
+            {BUNDLED_MODELS.map((mdl) => (
+              <option key={mdl.source} value={mdl.source}>{mdl.label}</option>
+            ))}
+          </optgroup>
+        </select>
+      </div>
       {model.source === 'obj' && (
         <FileInput
           label="Model (OBJ)"

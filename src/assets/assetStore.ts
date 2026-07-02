@@ -45,6 +45,75 @@ export function getModelAsset(ref: string | null): ModelAsset | undefined {
   return ref ? models.get(ref) : undefined;
 }
 
+// Notified when an async asset (e.g. a bundled model) finishes loading, so the
+// UI can re-render. Registered by App (avoids an assetStore -> store import cycle).
+let onAssetLoaded: () => void = () => {};
+export function setAssetLoadedCallback(cb: () => void): void {
+  onAssetLoaded = cb;
+}
+
+/** Asset-store key for a bundled example model. */
+export function bundledModelRef(source: string): string {
+  return `bundled:${source}`;
+}
+
+const loadingBundles = new Set<string>();
+
+/**
+ * Decode a compact binary mesh (see `scripts/obj-to-mesh.mjs`): a header +
+ * 16-bit-quantized positions + 32-bit triangle indices. Positions are
+ * dequantized over the stored bounding box; normals are recomputed.
+ */
+function decodeMesh(buffer: ArrayBuffer): THREE.BufferGeometry {
+  const head = new Uint32Array(buffer, 0, 4);
+  if (head[0] !== 0x48534d43) throw new Error('Unrecognized mesh format.');
+  const vCount = head[2];
+  const iCount = head[3];
+  const bbox = new Float32Array(buffer, 16, 6); // minXYZ, maxXYZ
+  const quant = new Uint16Array(buffer, 40, vCount * 3);
+  const positions = new Float32Array(vCount * 3);
+  for (let i = 0; i < vCount * 3; i++) {
+    const k = i % 3;
+    positions[i] = bbox[k] + (quant[i] / 65535) * (bbox[k + 3] - bbox[k]);
+  }
+  const idxByte = 40 + vCount * 3 * 2;
+  const indices = new Uint32Array(buffer.slice(idxByte, idxByte + iCount * 4));
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setIndex(new THREE.Uint32BufferAttribute(indices, 1));
+  geo.computeVertexNormals();
+  geo.computeBoundingBox();
+  const center = new THREE.Vector3();
+  geo.boundingBox!.getCenter(center);
+  geo.translate(-center.x, -center.y, -center.z);
+  geo.computeBoundingSphere();
+  return geo;
+}
+
+/**
+ * Fetch a gzipped binary mesh (once) from `url`, gunzip it via the browser's
+ * Compression Streams API, decode + register it under `bundledModelRef(source)`,
+ * and notify listeners. Safe to call repeatedly (in-flight/loaded refs skipped).
+ */
+export function ensureBundledModel(source: string, url: string): void {
+  const ref = bundledModelRef(source);
+  if (models.has(ref) || loadingBundles.has(ref)) return;
+  loadingBundles.add(ref);
+  fetch(url)
+    .then((r) => {
+      if (!r.ok || !r.body) throw new Error(`Failed to fetch model ${url} (${r.status}).`);
+      return new Response(r.body.pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
+    })
+    .then((buffer) => {
+      const geometry = decodeMesh(buffer);
+      models.set(ref, { geometry, radius: geometry.boundingSphere?.radius ?? 1 });
+      onAssetLoaded();
+    })
+    .catch((e) => console.error(e))
+    .finally(() => loadingBundles.delete(ref));
+}
+
 /** Merge all meshes of an OBJ group into one centered position+normal geometry. */
 function mergeGroup(group: THREE.Object3D): THREE.BufferGeometry {
   group.updateMatrixWorld(true);

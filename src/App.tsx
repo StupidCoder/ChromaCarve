@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { setAssetLoadedCallback } from './assets/assetStore';
 import { Footer } from './components/Footer';
 import { PreviewPanel } from './components/panels/PreviewPanel';
 import { SettingsPanel } from './components/panels/SettingsPanel';
@@ -12,6 +13,11 @@ export default function App() {
   const project = useProjectStore((s) => s.project);
   const assetVersion = useProjectStore((s) => s.assetVersion);
   const timer = useRef<number | undefined>(undefined);
+
+  // Re-render when an async asset (e.g. a bundled example model) finishes loading.
+  useEffect(() => {
+    setAssetLoadedCallback(() => useProjectStore.getState().bumpAssets());
+  }, []);
 
   // Debounce the (async, worker-driven) relief solve so rapid slider drags
   // coalesce into a single solve after the user pauses. The synchronous preview

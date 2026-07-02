@@ -554,7 +554,7 @@ export interface BackgroundImageSettings {
   depth: DepthRange;
 }
 
-export type ModelSource = 'obj' | 'torus' | 'sphere' | 'torusknot' | 'cube';
+export type ModelSource = 'obj' | 'torus' | 'sphere' | 'torusknot' | 'cube' | 'horse';
 
 export interface ModelSettings {
   /** Where the geometry comes from: a loaded OBJ or a procedural primitive. */
@@ -691,7 +691,7 @@ export function defaultProject(): Project {
       model: {
         source: 'obj',
         assetRef: null,
-        procTube: 0.18,
+        procTube: 0.13,
         procP: 2,
         procQ: 3,
         procSquash: 1,
@@ -738,7 +738,7 @@ export function defaultProject(): Project {
       model: {
         source: 'obj',
         assetRef: null,
-        procTube: 0.18,
+        procTube: 0.13,
         procP: 2,
         procQ: 3,
         procSquash: 1,

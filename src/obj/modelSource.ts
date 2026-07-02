@@ -1,6 +1,7 @@
 import * as THREE from 'three';
-import { getModelAsset, type ModelAsset } from '../assets/assetStore';
+import { bundledModelRef, ensureBundledModel, getModelAsset, type ModelAsset } from '../assets/assetStore';
 import type { ModelSettings } from '../state/store';
+import { BUNDLED_BY_SOURCE } from './bundledModels';
 
 /** Procedural primitives are built on demand and cached by their parameters. */
 const cache = new Map<string, ModelAsset>();
@@ -18,6 +19,7 @@ const clampNum = (v: number, lo: number, hi: number, fallback: number) =>
 /** Stable cache/dependency key for a model's geometry-affecting params. */
 export function geometryKey(m: GeoParams): string {
   if (m.source === 'obj') return `obj|${m.assetRef ?? ''}`;
+  if (BUNDLED_BY_SOURCE.has(m.source)) return `bundled|${m.source}`;
   return `${m.source}|${m.procTube}|${m.procP}|${m.procQ}|${m.procSquash}|${m.procBoxW}|${m.procBoxD}`;
 }
 
@@ -48,6 +50,15 @@ function buildProcedural(m: GeoParams): ModelAsset {
 /** Resolve a model's geometry: the loaded OBJ, or a procedural primitive. */
 export function resolveModel(m: GeoParams): ModelAsset | undefined {
   if (m.source === 'obj') return getModelAsset(m.assetRef);
+
+  // Bundled example model: load on demand; undefined until the fetch resolves
+  // (ensureBundledModel bumps the asset version, triggering a re-render).
+  const bundled = BUNDLED_BY_SOURCE.get(m.source);
+  if (bundled) {
+    const asset = getModelAsset(bundledModelRef(m.source));
+    if (!asset) ensureBundledModel(m.source, bundled.url);
+    return asset;
+  }
 
   const key = geometryKey(m);
   const existing = cache.get(key);
