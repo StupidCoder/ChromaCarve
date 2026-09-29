@@ -404,6 +404,18 @@ export function ForegroundTab() {
           <Toggle label="Use model colors" checked={m.useModelColors !== false}
             onChange={(v) => setModel((d) => { d.useModelColors = v; })} />
         )}
+        {m.source === 'obj' && getGltfAsset(m.assetRef)?.hasPbrMaterials && m.useModelColors !== false && (
+          <>
+            <Toggle label="Studio lighting" checked={m.studioLighting !== false}
+              onChange={(v) => setModel((d) => { d.studioLighting = v; })} />
+            {m.studioLighting !== false && (
+              <Slider label="Studio intensity" value={m.studioIntensity ?? 1}
+                min={0.1} max={3} step={0.05} format={(v) => `${v.toFixed(2)}×`}
+                onChange={(v) => setModel((d) => { d.studioIntensity = v; })} />
+            )}
+            <div className="muted">Studio reflections are baked into the exported color map.</div>
+          </>
+        )}
         {!(m.source === 'obj' && getGltfAsset(m.assetRef) && m.useModelColors !== false) && (
           <FillEditor label="Fill" fill={m.fill}
             onChange={(f) => setModel((d) => void (d.fill = f))} />

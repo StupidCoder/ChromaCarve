@@ -22,6 +22,7 @@ export interface ModelAsset {
   /** Radius of the bounding sphere (for framing cameras). */
   radius: number;
   materials?: THREE.MeshBasicMaterial[];
+  studioMaterials?: (THREE.MeshBasicMaterial | THREE.MeshStandardMaterial)[];
 }
 
 const gltfs = new Map<string, GltfAsset>();

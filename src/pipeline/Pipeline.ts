@@ -812,6 +812,7 @@ export class Pipeline {
     offsetY = 0,
     color = false,
   ) {
+    this.modelPass.setStudioLighting(model.studioLighting !== false, model.studioIntensity ?? 1);
     const canSS = model.supersample && Math.max(dest.width, dest.height) * 2 <= 1600;
     if (canSS) {
       const ss = this.ssTarget(key, dest.width * 2, dest.height * 2);

@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { studioMaterial } from '../three/studioEnvironment';
+import { posedNormals } from './posedNormals';
 import type { ModelAsset } from './assetStore';
 
 /** Retains the animated source; consumers receive a static, centered pose. */
@@ -7,11 +9,14 @@ export class GltfAsset {
   readonly mixer: THREE.AnimationMixer;
   private pose: ModelAsset | undefined;
   private key = '';
+  private studio = new Map<THREE.Material, THREE.MeshStandardMaterial>();
   readonly materials = new Map<THREE.Material, THREE.MeshBasicMaterial>();
 
   constructor(readonly scene: THREE.Object3D, readonly animations: THREE.AnimationClip[]) {
     this.mixer = new THREE.AnimationMixer(scene);
   }
+
+  get hasPbrMaterials(): boolean { return this.studio.size > 0; }
 
   sample(animation = -1, time = 0): ModelAsset {
     const clip = this.animations[animation];
@@ -29,6 +34,8 @@ export class GltfAsset {
     this.scene.updateMatrixWorld(true);
     const pieces: THREE.BufferGeometry[] = [];
     const materials: THREE.MeshBasicMaterial[] = [];
+    const studioMaterials: (THREE.MeshBasicMaterial | THREE.MeshStandardMaterial)[] = [];
+    let hasPbr = false;
     const vertex = new THREE.Vector3();
     this.scene.traverseVisible((object) => {
       if (!(object instanceof THREE.Mesh)) return;
@@ -41,6 +48,9 @@ export class GltfAsset {
         vertex.toArray(positions, i * 3);
       }
       posed.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      const normals = posedNormals(object);
+      if (normals) posed.setAttribute('normal', normals);
+      else posed.computeVertexNormals();
       posed.morphAttributes = {};
       const flat = posed.index ? posed.toNonIndexed() : posed;
       if (flat !== posed) posed.dispose();
@@ -54,7 +64,7 @@ export class GltfAsset {
         if (end <= start) continue;
         const piece = new THREE.BufferGeometry();
         // Common attributes permit merging meshes with differing UV/color layouts.
-        for (const [name, size, fallback] of [['position', 3, 0], ['uv', 2, 0], ['uv1', 2, 0], ['color', 4, 1]] as const) {
+        for (const [name, size, fallback] of [['position', 3, 0], ['normal', 3, 0], ['uv', 2, 0], ['uv1', 2, 0], ['color', 4, 1]] as const) {
           const attr = flat.getAttribute(name);
           const data = new Float32Array((end - start) * size).fill(fallback);
           if (attr) for (let i = start; i < end; i++) for (let c = 0; c < Math.min(size, attr.itemSize); c++) {
@@ -86,19 +96,29 @@ export class GltfAsset {
           this.materials.set(material, basic);
         }
         materials.push(basic);
+        if (material instanceof THREE.MeshStandardMaterial) {
+          let pbr = this.studio.get(material);
+          if (!pbr) {
+            pbr = studioMaterial(material);
+            this.studio.set(material, pbr);
+          }
+          studioMaterials.push(pbr);
+          hasPbr = true;
+        } else {
+          studioMaterials.push(basic); // KHR_materials_unlit remains unlit.
+        }
       }
       flat.dispose();
     });
     if (!pieces.length) throw new Error('No visible mesh geometry found in this GLB.');
     const geometry = mergeGeometries(pieces, true)!;
     pieces.forEach((g) => g.dispose());
-    geometry.computeVertexNormals();
     geometry.computeBoundingBox();
     const center = geometry.boundingBox!.getCenter(new THREE.Vector3());
     geometry.translate(-center.x, -center.y, -center.z);
     geometry.computeBoundingSphere();
     this.pose?.geometry.dispose();
-    this.pose = { geometry, radius: geometry.boundingSphere!.radius, materials };
+    this.pose = { geometry, radius: geometry.boundingSphere!.radius, materials, studioMaterials: hasPbr ? studioMaterials : undefined };
     this.key = key;
     return this.pose;
   }
@@ -108,6 +128,7 @@ export class GltfAsset {
     this.mixer.uncacheRoot(this.scene);
     this.pose?.geometry.dispose();
     this.materials.forEach((m) => m.dispose());
+    this.studio.forEach((m) => m.dispose());
     const textures = new Set<THREE.Texture>();
     const materials = new Set<THREE.Material>();
     this.scene.traverse((o) => {

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { createStudioEnvironment } from '../three/studioEnvironment';
 import { geometryKey, resolveModel } from '../obj/modelSource';
 import { useProjectStore, type ModelSettings } from '../state/store';
 
@@ -48,6 +49,8 @@ export function ObjRotationViewport({
   const scaleRef = useRef(model.scale);
   scaleRef.current = model.scale;
   const assetRef = useRef<Asset>(null);
+  const studioRef = useRef({ enabled: true, intensity: 1 });
+  studioRef.current = { enabled: model.studioLighting !== false, intensity: model.studioIntensity ?? 1 };
   const geoKey = geometryKey(model);
 
   const engine = useRef<{
@@ -71,7 +74,8 @@ export function ObjRotationViewport({
     mountRef.current!.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
-    scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+    const ambient = new THREE.AmbientLight(0xffffff, 0.5);
+    scene.add(ambient);
 
     // Orthographic to match the depth pass. Frustum is set per-view by frameOrtho.
     const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, 1000);
@@ -85,7 +89,7 @@ export function ObjRotationViewport({
     camera.add(dir.target); // target at the camera origin -> light aims forward
     scene.add(camera);
 
-    const mesh = new THREE.Mesh(
+    const mesh: THREE.Mesh = new THREE.Mesh(
       undefined,
       new THREE.MeshStandardMaterial({ color: 0x9fb0c0, roughness: 0.6, side: THREE.DoubleSide }),
     );
@@ -94,7 +98,19 @@ export function ObjRotationViewport({
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enablePan = false;
     controls.enableZoom = false; // the wheel drives model scale instead (below)
-    const render = () => renderer.render(scene, camera);
+    let studio: THREE.WebGLRenderTarget | undefined;
+    const defaultMaterial = mesh.material as THREE.MeshStandardMaterial;
+    const render = () => {
+      const asset = assetRef.current;
+      const useStudio = studioRef.current.enabled && !!asset?.studioMaterials;
+      if (useStudio) studio ??= createStudioEnvironment(renderer);
+      scene.environment = useStudio ? studio!.texture : null;
+      scene.environmentIntensity = studioRef.current.intensity;
+      scene.environmentRotation.copy(camera.rotation);
+      mesh.material = (useStudio ? asset!.studioMaterials : asset?.materials) ?? defaultMaterial;
+      ambient.visible = dir.visible = !useStudio;
+      renderer.render(scene, camera);
+    };
 
     // Fit the orthographic frustum to the model's view-space bounds, zoomed by
     // `scale` — identical framing to ModelDepthPass so the gizmo matches the maps.
@@ -169,12 +185,14 @@ export function ObjRotationViewport({
     };
     renderer.domElement.addEventListener('wheel', onWheel, { passive: false });
 
-    engine.current = { renderer, scene, camera, controls, mesh, defaultMaterial: mesh.material, render, frameOrtho, applyView, syncView };
+    engine.current = { renderer, scene, camera, controls, mesh, defaultMaterial, render, frameOrtho, applyView, syncView };
     render();
 
     return () => {
       renderer.domElement.removeEventListener('wheel', onWheel);
       controls.dispose();
+      studio?.dispose();
+      defaultMaterial.dispose();
       renderer.dispose();
       // dispose() alone leaves the GL context alive until GC; release it now so
       // repeatedly mounting this gizmo (e.g. switching settings tabs) doesn't
@@ -213,6 +231,8 @@ export function ObjRotationViewport({
     e.frameOrtho();
     e.render();
   }, [model.scale]);
+
+  useEffect(() => { engine.current?.render(); }, [model.studioLighting, model.studioIntensity]);
 
   // Re-apply roll when the slider changes (no orbit interaction needed).
   useEffect(() => {

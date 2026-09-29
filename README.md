@@ -48,7 +48,13 @@ clips do not specify a universal frame rate.
 
 **Use model colors** is enabled by default for GLB models. Turn it off to apply a
 ChromaCarve procedural fill. The orbit gizmo shows the original model colors;
-AO and curvature controls can shade the resulting color map. Transparent material
+AO and curvature controls can shade the resulting color map.
+PBR materials retain their metallic/roughness and normal textures, with **Studio
+lighting** enabled by default. The local studio environment supplies softbox
+reflections; **Studio intensity** adjusts their brightness. These reflections are
+baked into the color PNG from the selected view, without changing the depth map.
+Turn studio lighting off for the original flat base colors. Unlit game materials
+remain unlit. Transparent material
 regions are treated as cutouts (blended materials use a 50% threshold), since a
 height map can represent only one surface per pixel.
 

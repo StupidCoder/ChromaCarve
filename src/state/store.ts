@@ -701,6 +701,9 @@ export interface ModelSettings {
   animationTime?: number;
   /** Use GLB base color, texture and vertex colors instead of procedural fill. */
   useModelColors?: boolean;
+  /** Bake PBR materials under the local studio environment. */
+  studioLighting?: boolean;
+  studioIntensity?: number;
   /** Where the geometry comes from: a loaded OBJ or a procedural primitive. */
   source: ModelSource;
   assetRef: string | null;

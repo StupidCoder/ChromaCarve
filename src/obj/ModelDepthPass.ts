@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { createStudioEnvironment } from '../three/studioEnvironment';
 import type { ModelAsset } from '../assets/assetStore';
 
 /**
@@ -34,6 +35,13 @@ export class ModelDepthPass {
   private material: THREE.ShaderMaterial;
   private mesh = new THREE.Mesh();
   private asset: ModelAsset | undefined;
+  private studioEnvironment: THREE.WebGLRenderTarget | undefined;
+  private studioEnabled = true;
+
+  setStudioLighting(enabled: boolean, intensity: number) {
+    this.studioEnabled = enabled;
+    this.scene.environmentIntensity = intensity;
+  }
   private projected = new WeakMap<THREE.MeshBasicMaterial, { depth: THREE.MeshBasicMaterial; color: THREE.MeshBasicMaterial }>();
 
   private projectedMaterial(source: THREE.MeshBasicMaterial, color: boolean) {
@@ -99,6 +107,11 @@ export class ModelDepthPass {
     this.mesh.material = this.asset?.materials
       ? this.asset.materials.map((m) => this.projectedMaterial(m, color))
       : this.material;
+    if (color && this.studioEnabled && this.asset?.studioMaterials) {
+      this.studioEnvironment ??= createStudioEnvironment(renderer);
+      this.scene.environment = this.studioEnvironment.texture;
+      this.mesh.material = this.asset.studioMaterials;
+    }
     // The model is never physically scaled here; `scale` is applied as a zoom
     // of the auto-fit framing below (scale > 1 makes the model fill more of the
     // output, scale < 1 leaves margin), which is the intuitive behavior.
@@ -108,6 +121,7 @@ export class ModelDepthPass {
     const dist = radius * 2 + 1;
     const camZ = new THREE.Vector3(0, 0, 1).applyQuaternion(quat);
     this.camera.quaternion.copy(quat);
+    this.scene.environmentRotation.setFromQuaternion(quat);
     this.camera.position.copy(camZ.multiplyScalar(dist));
     this.camera.updateMatrixWorld(true);
 
