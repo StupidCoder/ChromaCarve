@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { GltfAsset } from './gltfAsset';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 
 /**
@@ -19,6 +21,13 @@ export interface ModelAsset {
   geometry: THREE.BufferGeometry;
   /** Radius of the bounding sphere (for framing cameras). */
   radius: number;
+  materials?: THREE.MeshBasicMaterial[];
+}
+
+const gltfs = new Map<string, GltfAsset>();
+
+export function getGltfAsset(ref: string | null): GltfAsset | undefined {
+  return ref ? gltfs.get(ref) : undefined;
 }
 
 const images = new Map<string, ImageAsset>();
@@ -151,6 +160,8 @@ function registerModel(name: string, geometry: THREE.BufferGeometry): string {
   if (geometry.getAttribute('position').count === 0) {
     throw new Error(`No geometry found in ${name}.`);
   }
+  gltfs.get(name)?.dispose();
+  gltfs.delete(name);
   models.get(name)?.geometry.dispose();
   models.set(name, { geometry, radius: geometry.boundingSphere?.radius ?? 1 });
   return name;
@@ -167,8 +178,18 @@ export async function loadStlFile(file: File): Promise<string> {
   return registerModel(file.name, centerAndFinalize(geometry));
 }
 
-/** Load an uploaded model file, dispatching to the OBJ or STL loader by extension. */
+/** Load an uploaded model file, dispatching to the GLB, OBJ or STL loader by extension. */
 export async function loadModelFile(file: File): Promise<string> {
+  if (/\.glb$/i.test(file.name)) {
+    const gltf = await new GLTFLoader().parseAsync(await file.arrayBuffer(), '');
+    const asset = new GltfAsset(gltf.scene, gltf.animations);
+    try { asset.sample(); } catch (e) { asset.dispose(); throw e; }
+    gltfs.get(file.name)?.dispose();
+    models.get(file.name)?.geometry.dispose();
+    models.delete(file.name);
+    gltfs.set(file.name, asset);
+    return file.name;
+  }
   return /\.stl$/i.test(file.name) ? loadStlFile(file) : loadObjFile(file);
 }
 

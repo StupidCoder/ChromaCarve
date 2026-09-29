@@ -1,5 +1,5 @@
 import { getPipeline } from '../pipeline/Pipeline';
-import { reliefClient, ReliefCancelled } from './reliefClient';
+import { reliefClient, ReliefCancelled, ReliefClient } from './reliefClient';
 import { previewProject, useProjectStore, type ModelSettings, type Project } from '../state/store';
 
 /**
@@ -50,6 +50,9 @@ export interface ReliefExportData {
   max: number;
 }
 
+// Exports must not be cancelled by a new interactive pose while they solve.
+const exportClient = new ReliefClient();
+
 /**
  * Solve the full-resolution relief for an export and RETURN it (rather than
  * uploading + bumping the previews). The caller uploads and renders it
@@ -62,7 +65,7 @@ export async function solveReliefExport(project: Project): Promise<ReliefExportD
   const inputs = pipeline.prepareReliefInputs(project, true, assetVersion);
   if (!inputs) return null;
   try {
-    const result = await reliefClient.solve(inputs.key, () => inputs, 'Rendering relief for export');
+    const result = await exportClient.solve(inputs.key, () => inputs, 'Rendering relief for export');
     return {
       data: result.data,
       mask: inputs.mask,
@@ -73,7 +76,7 @@ export async function solveReliefExport(project: Project): Promise<ReliefExportD
       max: result.max,
     };
   } catch (e) {
-    if (e instanceof ReliefCancelled) return null;
+    if (e instanceof ReliefCancelled) throw new Error('Export superseded by a newer export. Please try again.');
     throw e;
   }
 }

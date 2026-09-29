@@ -1,4 +1,4 @@
-import { loadImageFile, loadModelFile } from '../../assets/assetStore';
+import { getGltfAsset, loadImageFile, loadModelFile } from '../../assets/assetStore';
 import { BUNDLED_MODELS } from '../../obj/bundledModels';
 import { useProjectStore, type ModelSettings, type ModelSource } from '../../state/store';
 import { ObjRotationViewport } from '../ObjRotationViewport';
@@ -33,14 +33,19 @@ function ModelSourcePicker({
   model,
   setModel,
   bumpAssets,
+  allowGlb = false,
 }: {
   model: ModelSettings;
   setModel: SetModel;
   bumpAssets: () => void;
+  allowGlb?: boolean;
 }) {
   // Size the orbit gizmo to the output aspect so its orthographic framing matches
   // the depth/color maps exactly (same projection, same zoom — "what you see…").
   const output = useProjectStore((s) => s.project.output);
+  useProjectStore((s) => s.assetVersion);
+  const gltf = model.source === 'obj' ? getGltfAsset(model.assetRef) : undefined;
+  const clip = gltf?.animations[model.animationIndex ?? -1];
   const outAspect = Math.max(0.4, Math.min(2.5, output.widthMm / output.heightMm));
   const MAX_W = 248;
   const MAX_H = 220;
@@ -82,16 +87,24 @@ function ModelSourcePicker({
       {model.source === 'obj' && (
         <>
           <FileInput
-            label="Model (OBJ or STL)"
-            accept=".obj,.stl"
+            label={allowGlb ? "Model (GLB, OBJ or STL)" : "Model (OBJ or STL)"}
+            accept={allowGlb ? ".glb,.obj,.stl" : ".obj,.stl"}
             fileName={model.assetRef}
             onFile={(file) =>
               guard(async () => {
                 const ref = await loadModelFile(file);
                 setModel((m) => {
+                  const relinking = m.assetRef === ref;
                   m.assetRef = ref;
-                  m.rotationQuat = [0, 0, 0, 1]; // reset gizmo pose for the new model
-                  m.roll = 0;
+                  if (!relinking) {
+                    m.animationIndex = getGltfAsset(ref)?.animations.length ? 0 : -1;
+                    m.animationTime = 0;
+                    m.useModelColors = !!getGltfAsset(ref);
+                  }
+                  if (!relinking) {
+                    m.rotationQuat = [0, 0, 0, 1];
+                    m.roll = 0;
+                  }
                 });
                 bumpAssets();
               })
@@ -100,6 +113,29 @@ function ModelSourcePicker({
           <div className="muted">
             Your model is processed locally in your browser — it is never uploaded to the cloud.
           </div>
+        </>
+      )}
+      {gltf && (
+        <>
+          {gltf.animations.length > 0 ? (
+            <>
+              <Select
+                label="Animation"
+                value={String(model.animationIndex ?? -1)}
+                options={[{ value: '-1', label: 'Rest pose' }, ...gltf.animations.map((a, i) => ({
+                  value: String(i), label: a.name || `Animation ${i + 1}`,
+                }))]}
+                onChange={(v) => setModel((m) => { m.animationIndex = Number(v); m.animationTime = 0; })}
+              />
+              {clip && clip.duration > 0 && (
+                <Slider label="Pose time" value={Math.min(model.animationTime ?? 0, clip.duration)}
+                  min={0} max={clip.duration} step={0.001}
+                  format={(v) => `${v.toFixed(3)} / ${clip.duration.toFixed(3)} s`}
+                  onChange={(v) => setModel((m) => { m.animationTime = v; })} />
+              )}
+              <div className="muted">Scrub to choose the pose used in the foreground and exports.</div>
+            </>
+          ) : <div className="muted">This GLB contains a static model (no animations).</div>}
         </>
       )}
       {(model.source !== 'obj' || model.assetRef) && (
@@ -259,7 +295,7 @@ export function ForegroundTab() {
       />
 
       <Panel title="Model">
-        <ModelSourcePicker model={m} setModel={setModel} bumpAssets={bumpAssets} />
+        <ModelSourcePicker model={m} setModel={setModel} bumpAssets={bumpAssets} allowGlb />
         <Slider
           label="Scale"
           value={m.scale}
@@ -364,11 +400,14 @@ export function ForegroundTab() {
       </Panel>
 
       <Panel title="Color">
-        <FillEditor
-          label="Fill"
-          fill={m.fill}
-          onChange={(f) => setModel((d) => void (d.fill = f))}
-        />
+        {m.source === 'obj' && getGltfAsset(m.assetRef) && (
+          <Toggle label="Use model colors" checked={m.useModelColors !== false}
+            onChange={(v) => setModel((d) => { d.useModelColors = v; })} />
+        )}
+        {!(m.source === 'obj' && getGltfAsset(m.assetRef) && m.useModelColors !== false) && (
+          <FillEditor label="Fill" fill={m.fill}
+            onChange={(f) => setModel((d) => void (d.fill = f))} />
+        )}
       </Panel>
 
       <ShadingSection model={m} setModel={setModel} />

@@ -56,6 +56,7 @@ export function ObjRotationViewport({
     camera: THREE.OrthographicCamera;
     controls: OrbitControls;
     mesh: THREE.Mesh;
+    defaultMaterial: THREE.Material;
     render: () => void;
     frameOrtho: () => void;
     applyView: () => void;
@@ -168,7 +169,7 @@ export function ObjRotationViewport({
     };
     renderer.domElement.addEventListener('wheel', onWheel, { passive: false });
 
-    engine.current = { renderer, scene, camera, controls, mesh, render, frameOrtho, applyView, syncView };
+    engine.current = { renderer, scene, camera, controls, mesh, defaultMaterial: mesh.material, render, frameOrtho, applyView, syncView };
     render();
 
     return () => {
@@ -192,6 +193,7 @@ export function ObjRotationViewport({
     if (!asset) return;
     assetRef.current = asset;
     e.mesh.geometry = asset.geometry;
+    e.mesh.material = asset.materials ?? e.defaultMaterial;
     e.mesh.scale.setScalar(1); // model is never physically scaled; framing zooms
 
     const q = new THREE.Quaternion(...model.rotationQuat);
@@ -202,7 +204,7 @@ export function ObjRotationViewport({
     e.controls.update(); // settle OrbitControls' spherical state from the new position
     e.syncView(); // re-derive base orientation, apply roll + framing, report the quat
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [geoKey, assetVersion]);
+  }, [geoKey, assetVersion, width, height]);
 
   // Re-zoom the framing when scale changes (no re-framing of the orientation).
   useEffect(() => {

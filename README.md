@@ -24,7 +24,7 @@ The image is composited from three parts, combined by **priority replace**
 (`foreground ?? frame ?? background` per pixel). Each is toggled on/off independently
 and has its own depth `min`/`max` (relative height units).
 
-- **Foreground** — the main subject. Use an uploaded **OBJ** or a procedural primitive
+- **Foreground** — the main subject. Use an uploaded **GLB, OBJ or STL** or a procedural primitive
   (**torus, sphere, torus knot, cube**), freely oriented in an orbit gizmo. The depth map
   is the **orthographic** projection from the angle you set — what you see in the gizmo is
   what you get. Offset it in X/Y within the canvas.
@@ -36,6 +36,25 @@ and has its own depth `min`/`max` (relative height units).
   (overlaps take the per-pixel **max** height, e.g. dragon scales), or a **solid color**.
 
 Output size is physical (mm + px/mm).
+
+## Animated GLB foregrounds
+
+Upload a self-contained `.glb` in **Foreground → Model → Your model**. Textures,
+base colors and vertex colors are preserved. Choose an **Animation** and scrub
+**Pose time** to select the static pose used for the foreground, bas-relief and
+PNG exports. **Rest pose** uses the model without animation. Skeletal, morph-target
+and node-transform clips are supported; the timeline is in seconds because GLB
+clips do not specify a universal frame rate.
+
+**Use model colors** is enabled by default for GLB models. Turn it off to apply a
+ChromaCarve procedural fill. The orbit gizmo shows the original model colors;
+AO and curvature controls can shade the resulting color map. Transparent material
+regions are treated as cutouts (blended materials use a 50% threshold), since a
+height map can represent only one surface per pixel.
+
+Project JSON saves the animation selection and time, but does not embed the GLB.
+Re-upload the same filename after importing settings to restore the selected pose.
+GLB support is for foregrounds; background uploads remain OBJ/STL.
 
 ## Materials
 

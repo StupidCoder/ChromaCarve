@@ -46,12 +46,14 @@ function HelpModal({ onClose }: { onClose: () => void }) {
               main model, <em>Background</em> is the surface behind it, <em>Frame</em> adds a border.
             </li>
             <li>
-              In <em>Foreground</em>, choose a <strong>Model</strong> — upload an <code>.obj</code>{' '}
-              or pick a primitive — then orbit the small gizmo to set the viewing angle. What you see
-              there is what gets carved.
+              In <em>Foreground</em>, choose a <strong>Model</strong> — upload a GLB, OBJ or STL
+              or pick a primitive — then orbit the small gizmo to set the viewing angle. For an
+              animated GLB, choose an <strong>Animation</strong> and scrub <strong>Pose time</strong>
+              to select the pose you want to carve.
             </li>
             <li>
-              Under <strong>Color</strong>, choose a <strong>Fill</strong>: a solid color or a
+              GLB models keep their original colors by default. Turn off <strong>Use model colors</strong>
+              {' '}to choose a <strong>Fill</strong>: a solid color or a
               procedural <em>Wood grain</em> / <em>Stone</em> material with per-species presets.
             </li>
             <li>

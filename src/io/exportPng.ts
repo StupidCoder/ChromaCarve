@@ -5,16 +5,17 @@ import { outputResolution, type Project } from '../state/store';
 
 /**
  * Solve the full-resolution relief and upload it, then return `pipeline.render`'s
- * result — all synchronous after the (awaited) solve, so a concurrent preview
+ * pixels — all synchronous after the (awaited) solve, so a concurrent preview
  * render can't resize the shared pipeline between the upload and the read-back
  * (which would otherwise export the raw depth instead of the bas-relief).
  */
-async function renderForExport(pipeline: Pipeline, project: Project) {
+async function renderForExport(pipeline: Pipeline, project: Project, channel: 'depth' | 'color') {
   const relief = await solveReliefExport(project);
   if (relief) {
     pipeline.uploadRelief(relief.data, relief.mask, relief.w, relief.h, relief.model, relief.min, relief.max);
   }
-  return pipeline.render(project);
+  const result = pipeline.render(project);
+  return { ...pipeline.size, buf: pipeline.readFloat(result[channel]) };
 }
 
 /**
@@ -69,9 +70,7 @@ function clampToMaxTexture(project: Project): Project {
 export async function exportDepthPng(project: Project, filename = 'depth.png') {
   const pipeline = getPipeline();
   project = clampToMaxTexture(project);
-  const result = await renderForExport(pipeline, project);
-  const { width, height } = pipeline.size;
-  const buf = pipeline.readFloat(result.depth);
+  const { width, height, buf } = await renderForExport(pipeline, project, 'depth');
 
   let min = Infinity;
   let max = -Infinity;
@@ -97,9 +96,7 @@ export async function exportDepthPng(project: Project, filename = 'depth.png') {
 export async function exportColorPng(project: Project, filename = 'color.png') {
   const pipeline = getPipeline();
   project = clampToMaxTexture(project);
-  const result = await renderForExport(pipeline, project);
-  const { width, height } = pipeline.size;
-  const buf = pipeline.readFloat(result.color);
+  const { width, height, buf } = await renderForExport(pipeline, project, 'color');
 
   const out = new Uint8Array(width * height * 4);
   for (let y = 0; y < height; y++) {

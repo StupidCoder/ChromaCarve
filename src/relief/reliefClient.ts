@@ -42,7 +42,7 @@ interface Job {
  * requests (a newer edit terminates the running solve), and streams progress +
  * ETA to the progress store.
  */
-class ReliefClient {
+export class ReliefClient {
   private worker: Worker | null = null;
   private nextId = 1;
   private job: Job | null = null;

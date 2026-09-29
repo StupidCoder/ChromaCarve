@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { bundledModelRef, ensureBundledModel, getModelAsset, type ModelAsset } from '../assets/assetStore';
+import { bundledModelRef, ensureBundledModel, getGltfAsset, getModelAsset, type ModelAsset } from '../assets/assetStore';
 import type { ModelSettings } from '../state/store';
 import { BUNDLED_BY_SOURCE } from './bundledModels';
 
@@ -10,7 +10,7 @@ const MAX_CACHE = 16;
 /** Only the fields that affect the resolved geometry. */
 type GeoParams = Pick<
   ModelSettings,
-  'source' | 'assetRef' | 'procTube' | 'procP' | 'procQ' | 'procSquash' | 'procBoxW' | 'procBoxD'
+  'animationIndex' | 'animationTime' | 'source' | 'assetRef' | 'procTube' | 'procP' | 'procQ' | 'procSquash' | 'procBoxW' | 'procBoxD'
 >;
 
 const clampNum = (v: number, lo: number, hi: number, fallback: number) =>
@@ -18,7 +18,7 @@ const clampNum = (v: number, lo: number, hi: number, fallback: number) =>
 
 /** Stable cache/dependency key for a model's geometry-affecting params. */
 export function geometryKey(m: GeoParams): string {
-  if (m.source === 'obj') return `obj|${m.assetRef ?? ''}`;
+  if (m.source === 'obj') return `obj|${m.assetRef ?? ''}|${m.animationIndex ?? -1}|${m.animationTime ?? 0}`;
   if (BUNDLED_BY_SOURCE.has(m.source)) return `bundled|${m.source}`;
   return `${m.source}|${m.procTube}|${m.procP}|${m.procQ}|${m.procSquash}|${m.procBoxW}|${m.procBoxD}`;
 }
@@ -49,7 +49,7 @@ function buildProcedural(m: GeoParams): ModelAsset {
 
 /** Resolve a model's geometry: the loaded OBJ, or a procedural primitive. */
 export function resolveModel(m: GeoParams): ModelAsset | undefined {
-  if (m.source === 'obj') return getModelAsset(m.assetRef);
+  if (m.source === 'obj') return getGltfAsset(m.assetRef)?.sample(m.animationIndex, m.animationTime) ?? getModelAsset(m.assetRef);
 
   // Bundled example model: load on demand; undefined until the fetch resolves
   // (ensureBundledModel bumps the asset version, triggering a re-render).

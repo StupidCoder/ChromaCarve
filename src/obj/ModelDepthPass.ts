@@ -33,6 +33,36 @@ export class ModelDepthPass {
   private camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, 10);
   private material: THREE.ShaderMaterial;
   private mesh = new THREE.Mesh();
+  private asset: ModelAsset | undefined;
+  private projected = new WeakMap<THREE.MeshBasicMaterial, { depth: THREE.MeshBasicMaterial; color: THREE.MeshBasicMaterial }>();
+
+  private projectedMaterial(source: THREE.MeshBasicMaterial, color: boolean) {
+    let pair = this.projected.get(source);
+    if (!pair) {
+      const make = (isColor: boolean) => {
+        const m = source.clone();
+        m.onBeforeCompile = (shader) => {
+          shader.uniforms.uZNear = this.material.uniforms.uZNear;
+          shader.uniforms.uZFar = this.material.uniforms.uZFar;
+          shader.vertexShader = 'varying float vViewZ;\n' + shader.vertexShader.replace(
+            '#include <project_vertex>', '#include <project_vertex>\nvViewZ = mvPosition.z;');
+          shader.fragmentShader = 'varying float vViewZ; uniform float uZNear; uniform float uZFar;\n' + shader.fragmentShader.replace(
+            '#include <dithering_fragment>',
+            isColor
+              ? 'gl_FragColor = sRGBTransferOETF(vec4(outgoingLight, 1.0));'
+              : 'gl_FragColor = vec4(clamp((vViewZ-uZFar)/max(uZNear-uZFar,1e-6),0.0,1.0),1.0,0.0,1.0);',
+          );
+        };
+        m.customProgramCacheKey = () => isColor ? 'model-projected-color' : 'model-projected-depth';
+        return m;
+      };
+      pair = { depth: make(false), color: make(true) };
+      this.projected.set(source, pair);
+      const owned = pair;
+      source.addEventListener('dispose', () => { owned.depth.dispose(); owned.color.dispose(); });
+    }
+    return color ? pair.color : pair.depth;
+  }
   private corners: THREE.Vector3[] = Array.from({ length: 8 }, () => new THREE.Vector3());
 
   constructor() {
@@ -47,6 +77,7 @@ export class ModelDepthPass {
   }
 
   setGeometry(asset: ModelAsset) {
+    this.asset = asset;
     this.mesh.geometry = asset.geometry;
   }
 
@@ -63,7 +94,11 @@ export class ModelDepthPass {
     radius: number,
     offsetX = 0, // output-fraction shift (+x = model moves right)
     offsetY = 0, // (+y = model moves up)
+    color = false,
   ) {
+    this.mesh.material = this.asset?.materials
+      ? this.asset.materials.map((m) => this.projectedMaterial(m, color))
+      : this.material;
     // The model is never physically scaled here; `scale` is applied as a zoom
     // of the auto-fit framing below (scale > 1 makes the model fill more of the
     // output, scale < 1 leaves margin), which is the intuitive behavior.
@@ -126,7 +161,7 @@ export class ModelDepthPass {
     const prevClear = renderer.getClearColor(new THREE.Color());
     const prevAlpha = renderer.getClearAlpha();
     renderer.setRenderTarget(target);
-    renderer.setClearColor(0x000000, 1);
+    renderer.setClearColor(0x000000, color ? 0 : 1);
     renderer.clear();
     renderer.render(this.scene, this.camera);
     renderer.setRenderTarget(null);

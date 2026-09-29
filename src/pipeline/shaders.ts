@@ -812,6 +812,8 @@ void main() {
 export const MODEL_COLOR_FS = /* glsl */ `
 varying vec2 vUv;
 uniform sampler2D uModel;    // r = height, g = coverage
+uniform sampler2D uModelColor;
+uniform bool uUseModelColor;
 uniform sampler2D uAoBlur;   // blurred height for cavity AO (= uModel when off)
 uniform vec2 uSizeMm;
 uniform float uAoStrength;
@@ -858,7 +860,8 @@ void main() {
 
   // Volumetric fill: pass the height (hC) as the Z of the 3D sample point so the
   // wood grain is carved out of a solid block (flat fills ignore z).
-  vec3 base = evalFill(vUv * uSizeMm, hC);
+  vec4 modelColor = texture2D(uModelColor, vUv);
+  vec3 base = uUseModelColor ? modelColor.rgb / max(modelColor.a, 1e-5) : evalFill(vUv * uSizeMm, hC);
   gl_FragColor = vec4(base * ao * crease, cov);
 }
 `;

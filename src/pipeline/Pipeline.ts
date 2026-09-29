@@ -4,7 +4,7 @@ import type { Fill, ModelSettings, Project } from '../state/store';
 import { defaultPatternParams, defaultStoneParams, defaultWoodParams, outputResolution } from '../state/store';
 import { getImageAsset } from '../assets/assetStore';
 import { ModelDepthPass } from '../obj/ModelDepthPass';
-import { resolveModel } from '../obj/modelSource';
+import { geometryKey, resolveModel } from '../obj/modelSource';
 import { sampleProfile } from '../spline/profile';
 import type { BasReliefParams } from '../relief/basRelief';
 import type { ReliefInputs } from '../relief/reliefClient';
@@ -24,6 +24,12 @@ import {
 } from './shaders';
 
 const PROFILE_LUT = 256; // resolution of the border profile lookup texture
+
+function reliefModelKey(m: ModelSettings): string {
+  return JSON.stringify([geometryKey(m), m.rotationQuat, m.scale,
+    'offsetXmm' in m ? m.offsetXmm : 0, 'offsetYmm' in m ? m.offsetYmm : 0,
+    m.reliefBeta, m.reliefAlphaFactor, m.reliefEmergeMm, m.normalizeDepth, m.supersample]);
+}
 
 const TILE_TEX = 1024; // resolution of the single-tile height map
 
@@ -195,6 +201,7 @@ export class Pipeline {
   private reliefTex: THREE.DataTexture | null = null;
   /** Whether `reliefDepth` holds a computed relief (else render falls back to raw). */
   private hasRelief = false;
+  private reliefModel = '';
   /** Stretch range of the current relief for finalizeModelDepth. */
   private reliefRange: { min: number; max: number } = { min: 0, max: 1 };
   /** Lazily-sized, linear-filtered, depth-buffered targets for supersampling. */
@@ -263,6 +270,8 @@ export class Pipeline {
       }),
       modelColor: mat(MODEL_COLOR_FS, {
         uModel: { value: null },
+        uModelColor: { value: null },
+        uUseModelColor: { value: false },
         uAoBlur: { value: null },
         uSizeMm: { value: new THREE.Vector2() },
         uAoStrength: { value: 0 },
@@ -639,13 +648,22 @@ export class Pipeline {
         foreground.model.offsetYmm / output.heightMm,
       );
 
+      const useModelColor = !!fgAsset.materials && foreground.model.useModelColors !== false;
+      if (useModelColor) {
+        t.modelTexture ??= makeTarget(res.width, res.height, true);
+        this.renderModelDepth('fgColor', foreground.model, fgAsset, t.modelTexture,
+          new THREE.Quaternion(...foreground.model.rotationQuat),
+          foreground.model.offsetXmm / output.widthMm,
+          foreground.model.offsetYmm / output.heightMm, true);
+      }
+
       // Bas-relief: use the gradient-domain relief computed asynchronously in a
       // worker (see updateRelief). render() is synchronous and consumes whatever
       // relief is currently cached in `reliefDepth`; until the first solve
       // completes (or after a resize) it falls back to the raw height field.
       let heightTarget = t.modelDepth;
       let reliefRange: { min: number; max: number } | undefined;
-      if (foreground.model.basRelief && this.hasRelief) {
+      if (foreground.model.basRelief && this.hasRelief && this.reliefModel === reliefModelKey(foreground.model)) {
         heightTarget = t.reliefDepth;
         reliefRange = this.reliefRange;
       }
@@ -657,6 +675,7 @@ export class Pipeline {
         t.fgColor,
         output.widthMm,
         output.heightMm,
+        useModelColor ? t.modelTexture.texture : undefined,
       );
 
       this.finalizeModelDepth(
@@ -791,14 +810,15 @@ export class Pipeline {
     quat: THREE.Quaternion,
     offsetX = 0,
     offsetY = 0,
+    color = false,
   ) {
     const canSS = model.supersample && Math.max(dest.width, dest.height) * 2 <= 1600;
     if (canSS) {
       const ss = this.ssTarget(key, dest.width * 2, dest.height * 2);
-      this.modelPass.render(this.renderer, ss, quat, model.scale, asset.radius, offsetX, offsetY);
+      this.modelPass.render(this.renderer, ss, quat, model.scale, asset.radius, offsetX, offsetY, color);
       this.downsample(ss, dest);
     } else {
-      this.modelPass.render(this.renderer, dest, quat, model.scale, asset.radius, offsetX, offsetY);
+      this.modelPass.render(this.renderer, dest, quat, model.scale, asset.radius, offsetX, offsetY, color);
     }
   }
 
@@ -831,6 +851,7 @@ export class Pipeline {
     out: THREE.WebGLRenderTarget,
     widthMm: number,
     heightMm: number,
+    modelColor?: THREE.Texture,
   ) {
     let aoTex = height.texture;
     if (model.aoStrength > 0) {
@@ -840,6 +861,8 @@ export class Pipeline {
     }
     const mc = this.mats.modelColor;
     mc.uniforms.uModel.value = height.texture;
+    mc.uniforms.uUseModelColor.value = !!modelColor;
+    mc.uniforms.uModelColor.value = modelColor ?? height.texture;
     mc.uniforms.uAoBlur.value = aoTex;
     (mc.uniforms.uSizeMm.value as THREE.Vector2).set(widthMm, heightMm);
     this.setFill(mc, model.fill);
@@ -905,7 +928,7 @@ export class Pipeline {
     const cap = fullRes ? RELIEF_EXPORT_DIM : RELIEF_PREVIEW_DIM;
     // Key = everything that determines the relief; unrelated edits reuse the cache.
     const key = JSON.stringify([
-      w, h, cap, assetVersion, m.source, m.assetRef,
+      w, h, cap, assetVersion, geometryKey(m),
       m.procTube, m.procP, m.procQ, m.procSquash, m.procBoxW, m.procBoxD,
       m.rotationQuat, m.scale, m.offsetXmm, m.offsetYmm, m.supersample,
       params.beta, params.alphaFactor, params.emergeFrac, m.normalizeDepth,
@@ -943,6 +966,7 @@ export class Pipeline {
     blur.uniforms.uTex.value = this.reliefTex;
     this.pass(blur, this.targets.reliefDepth);
     this.hasRelief = true;
+    this.reliefModel = reliefModelKey(model);
     this.reliefRange = model.normalizeDepth ? { min, max } : { min: 0, max: 1 };
   }
 
@@ -1005,7 +1029,8 @@ export class Pipeline {
           : model.fill.type === 'pattern'
             ? (model.fill.pattern ?? defaultPatternParams()).microRelief
             : null;
-    const reliefOn = !!micro && micro.enabled && micro.amount > 0;
+    const reliefOn = !!micro && micro.enabled && micro.amount > 0 &&
+      !(model.useModelColors !== false && resolveModel(model)?.materials);
     md.uniforms.uMatReliefAmount.value = reliefOn ? micro!.amount : 0;
     if (reliefOn) {
       this.setFill(md, model.fill);

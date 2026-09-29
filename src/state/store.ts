@@ -696,6 +696,11 @@ export type ModelSource =
   | 'lighthouse';
 
 export interface ModelSettings {
+  /** GLB clip index (-1 = rest pose) and sample time in seconds. */
+  animationIndex?: number;
+  animationTime?: number;
+  /** Use GLB base color, texture and vertex colors instead of procedural fill. */
+  useModelColors?: boolean;
   /** Where the geometry comes from: a loaded OBJ or a procedural primitive. */
   source: ModelSource;
   assetRef: string | null;
