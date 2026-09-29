@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { bundledModelRef, ensureBundledModel, getGltfAsset, getModelAsset, type ModelAsset } from '../assets/assetStore';
 import type { ModelSettings } from '../state/store';
+import { smoothModel } from './smoothGeometry';
 import { BUNDLED_BY_SOURCE } from './bundledModels';
 
 /** Procedural primitives are built on demand and cached by their parameters. */
@@ -10,14 +11,14 @@ const MAX_CACHE = 16;
 /** Only the fields that affect the resolved geometry. */
 type GeoParams = Pick<
   ModelSettings,
-  'animationIndex' | 'animationTime' | 'source' | 'assetRef' | 'procTube' | 'procP' | 'procQ' | 'procSquash' | 'procBoxW' | 'procBoxD'
+  'smoothGeometry' | 'smoothingSegments' | 'smoothingStrength' | 'animationIndex' | 'animationTime' | 'source' | 'assetRef' | 'procTube' | 'procP' | 'procQ' | 'procSquash' | 'procBoxW' | 'procBoxD'
 >;
 
 const clampNum = (v: number, lo: number, hi: number, fallback: number) =>
   Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : fallback;
 
 /** Stable cache/dependency key for a model's geometry-affecting params. */
-export function geometryKey(m: GeoParams): string {
+function sourceGeometryKey(m: GeoParams): string {
   if (m.source === 'obj') return `obj|${m.assetRef ?? ''}|${m.animationIndex ?? -1}|${m.animationTime ?? 0}`;
   if (BUNDLED_BY_SOURCE.has(m.source)) return `bundled|${m.source}`;
   return `${m.source}|${m.procTube}|${m.procP}|${m.procQ}|${m.procSquash}|${m.procBoxW}|${m.procBoxD}`;
@@ -48,7 +49,7 @@ function buildProcedural(m: GeoParams): ModelAsset {
 }
 
 /** Resolve a model's geometry: the loaded OBJ, or a procedural primitive. */
-export function resolveModel(m: GeoParams): ModelAsset | undefined {
+function resolveSourceModel(m: GeoParams): ModelAsset | undefined {
   if (m.source === 'obj') return getGltfAsset(m.assetRef)?.sample(m.animationIndex, m.animationTime) ?? getModelAsset(m.assetRef);
 
   // Bundled example model: load on demand; undefined until the fetch resolves
@@ -60,7 +61,7 @@ export function resolveModel(m: GeoParams): ModelAsset | undefined {
     return asset;
   }
 
-  const key = geometryKey(m);
+  const key = sourceGeometryKey(m);
   const existing = cache.get(key);
   if (existing) {
     cache.delete(key); // LRU bump
@@ -75,4 +76,15 @@ export function resolveModel(m: GeoParams): ModelAsset | undefined {
     cache.delete(oldest);
   }
   return asset;
+}
+
+/** Includes subdivision settings so the gizmo and relief worker invalidate together. */
+export function geometryKey(m: GeoParams): string {
+  return sourceGeometryKey(m) + (m.smoothGeometry
+    ? `|smooth:${m.smoothingSegments ?? 4}:${m.smoothingStrength ?? 1}` : '');
+}
+
+export function resolveModel(m: GeoParams): ModelAsset | undefined {
+  const asset = resolveSourceModel(m);
+  return asset && m.smoothGeometry ? smoothModel(asset, m.smoothingSegments, m.smoothingStrength) : asset;
 }

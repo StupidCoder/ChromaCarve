@@ -1,4 +1,6 @@
 import { getGltfAsset, loadImageFile, loadModelFile } from '../../assets/assetStore';
+import { resolveModel } from '../../obj/modelSource';
+import { smoothingSegments } from '../../obj/smoothGeometry';
 import { BUNDLED_MODELS } from '../../obj/bundledModels';
 import { useProjectStore, type ModelSettings, type ModelSource } from '../../state/store';
 import { ObjRotationViewport } from '../ObjRotationViewport';
@@ -280,6 +282,35 @@ function EnableRow({
   );
 }
 
+function GeometrySmoothing({ model, setModel }: { model: ModelSettings; setModel: SetModel }) {
+  useProjectStore((s) => s.assetVersion);
+  const source = model.smoothGeometry ? resolveModel({ ...model, smoothGeometry: false }) : undefined;
+  const requested = model.smoothingSegments ?? 4;
+  const actual = source ? smoothingSegments(source.geometry, requested) : requested;
+  return (
+    <>
+      <Toggle label="Smooth geometry" checked={model.smoothGeometry ?? false}
+        onChange={(v) => setModel((m) => { m.smoothGeometry = v; })} />
+      {model.smoothGeometry && (
+        <>
+          <Select label="Subdivision" value={String(requested)}
+            options={[{ value: '2', label: 'Low · 4 triangles per face' },
+              { value: '4', label: 'Medium · 16 triangles per face' },
+              { value: '8', label: 'High · 64 triangles per face' }]}
+            onChange={(v) => setModel((m) => { m.smoothingSegments = Number(v); })} />
+          <Slider label="Smoothing strength" value={model.smoothingStrength ?? 1}
+            min={0} max={1} step={0.05} format={(v) => `${Math.round(v * 100)}%`}
+            onChange={(v) => setModel((m) => { m.smoothingStrength = v; })} />
+          <div className="muted">Curves the surface using vertex normals, including the exported relief. Lower the strength if small details bulge.</div>
+          {actual < requested && <div className="muted">{actual === 1
+            ? 'This mesh is too large to subdivide within the geometry budget; using the original surface.'
+            : `Subdivision limited to ${actual * actual} triangles per face for this mesh.`}</div>}
+        </>
+      )}
+    </>
+  );
+}
+
 export function ForegroundTab() {
   const fg = useProjectStore((s) => s.project.foreground);
   const update = useProjectStore((s) => s.update);
@@ -296,6 +327,7 @@ export function ForegroundTab() {
 
       <Panel title="Model">
         <ModelSourcePicker model={m} setModel={setModel} bumpAssets={bumpAssets} allowGlb />
+        <GeometrySmoothing model={m} setModel={setModel} />
         <Slider
           label="Scale"
           value={m.scale}

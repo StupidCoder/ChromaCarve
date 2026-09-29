@@ -696,6 +696,10 @@ export type ModelSource =
   | 'lighthouse';
 
 export interface ModelSettings {
+  /** Optional PN-triangle subdivision of the selected static pose (off by default). */
+  smoothGeometry?: boolean;
+  smoothingSegments?: number;
+  smoothingStrength?: number;
   /** GLB clip index (-1 = rest pose) and sample time in seconds. */
   animationIndex?: number;
   animationTime?: number;

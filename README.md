@@ -62,6 +62,20 @@ Project JSON saves the animation selection and time, but does not embed the GLB.
 Re-upload the same filename after importing settings to restore the selected pose.
 GLB support is for foregrounds; background uploads remain OBJ/STL.
 
+## Geometry smoothing
+
+Enable **Foreground → Model → Smooth geometry** to curve coarse triangles using
+surface normals (PN-triangle subdivision). This changes the actual surface used
+by the gizmo, color projection, depth map and bas-relief solver. It is off by
+default and is applied after selecting an animation pose.
+
+Choose **Subdivision** (4, 16 or 64 triangles per original face) and adjust
+**Smoothing strength**. The original vertices, texture seams and material groups
+are retained; edges with split normals remain sharp and connected. Smooth authored
+normals give the best results. Lower the strength if small details bulge or nearby
+surfaces start intersecting. Subdivision is capped at 500,000 output triangles,
+with a notice when the selected level cannot fit. Settings are saved in project JSON.
+
 ## Materials
 
 Every part is textured with a **Fill**, evaluated procedurally in canvas space:
