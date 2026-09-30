@@ -1,10 +1,12 @@
+import { MarkingsInspector } from './MarkingsInspector';
+import { DEFAULT_MARKINGS } from './geometry/markingSettings';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ModelPoseControls } from '../components/ModelPoseControls';
 import { ModelViewport } from '../three/ModelViewport';
 import { WorkspaceSwitcher } from '../workspaces/WorkspaceSwitcher';
 import { navigateWorkspace } from '../workspaces/navigation';
 import { removeSlicesHandoff } from './storage';
-import { importSlicesModel, initializeSlices, setOmittedPieces, setSlicesPose, useSlicesStore } from './store';
+import { importSlicesModel, initializeSlices, setOmittedPieces, setMarkingSettings, setSlicesPose, useSlicesStore } from './store';
 import { DEFAULT_SLICE_SETUP } from './geometry/types';
 import { PhysicalSetup } from './PhysicalSetup';
 import { LayerInspector } from './LayerInspector';
@@ -16,7 +18,7 @@ import { useSlicing } from './useSlicing';
 export default function SlicesApp({ handoff }: { handoff: string | null }) {
   const { asset, model, document, busy, error, saveStatus } = useSlicesStore();
   const [showColors, setShowColors] = useState(true);
-  const [view, setView] = useState<'source' | 'sections' | 'compare' | 'assembly'>('compare');
+  const [view, setView] = useState<'source' | 'sections' | 'compare' | 'assembly' | 'markings'>('compare');
   const comparisonView = useRef<ComparisonView | undefined>(undefined);
   useEffect(() => { comparisonView.current = undefined; }, [document?.source]);
   const setup = document?.setup ?? DEFAULT_SLICE_SETUP;
@@ -48,7 +50,7 @@ export default function SlicesApp({ handoff }: { handoff: string | null }) {
         <ol className="slices-steps" aria-label="Workflow">
           <li aria-current={view === 'source' ? 'step' : undefined}>Model</li>
           <li aria-current={view === 'sections' || view === 'compare' ? 'step' : undefined}>Slices</li>
-          <li aria-current={view === 'assembly' ? 'step' : undefined}>Assembly</li>
+          <li aria-current={view === 'assembly' || view === 'markings' ? 'step' : undefined}>Assembly</li>
           <li>Cutting sheets</li>
         </ol>
         <section className="slices-model-section" aria-labelledby="source-heading">
@@ -78,14 +80,14 @@ export default function SlicesApp({ handoff }: { handoff: string | null }) {
             </label>}
             <p className={saveStatus === 'unavailable' ? 'warn' : 'muted'} role="status">
               {saveStatus === 'saving' ? 'Saving in this browser…' : saveStatus === 'saved'
-                ? 'Model, pose, setup and omissions saved in this browser.'
+                ? 'Project saved in this browser.'
                 : 'Browser storage is unavailable or full. This model is open, but changes may not survive a reload.'}
             </p>
           </>}
         </section>
         {!!document?.omittedPieceIds?.length && <p className="muted">{document.omittedPieceIds.length} pieces omitted · {retained?.pieceCount ?? '…'} retained. Manage omissions in Assembly.</p>}
         <div>{asset && <PhysicalSetup asset={asset} setup={setup} disabled={busy} computation={computation} />}</div>
-        <p className="slices-scope-note">Inspect the plywood shape before building. Inspect assembly contacts in the Assembly view. Markings and cutting-sheet export are coming next.</p>
+        <p className="slices-scope-note">Inspect the plywood shape before building. Inspect assembly contacts in the Assembly view. Review hidden guides and numbers in Markings. Cutting-sheet export is coming next.</p>
       </aside>
       <main className="slices-preview" aria-label="Model preview" aria-busy={busy}>
         <div className="slices-preview-heading">
@@ -98,12 +100,18 @@ export default function SlicesApp({ handoff }: { handoff: string | null }) {
               disabled={!asset} onClick={() => setView('sections')}>Cross-sections</button>
             <button role="tab" id="assembly-tab" aria-selected={view === 'assembly'} aria-controls="assembly-preview"
               disabled={!asset} onClick={() => setView('assembly')}>Assembly</button>
+            <button role="tab" id="markings-tab" aria-selected={view === 'markings'} aria-controls="markings-preview"
+              disabled={!asset} onClick={() => setView('markings')}>Markings</button>
           </div>
-          <span>{view === 'sections' ? '2D layers' : '3D preview'}</span>
+          <span>{view === 'sections' || view === 'markings' ? '2D layers' : '3D preview'}</span>
         </div>
         {asset && document ? (view === 'source'
           ? <div role="tabpanel" id="source-preview" aria-labelledby="source-tab">
               <ModelViewport asset={asset} viewQuaternion={document.viewQuaternion} showColors={showColors} modelRotationDeg={setup.rotationDeg} />
+            </div>
+          : view === 'markings' ? <div role="tabpanel" id="markings-preview" aria-labelledby="markings-tab">
+              {retained ? <MarkingsInspector result={retained} settings={document.markingSettings ?? DEFAULT_MARKINGS} onSettingsChange={setMarkingSettings} />
+                : <div className="slices-empty"><p role="status">{computation.error ?? 'Generate slices to prepare assembly markings.'}</p></div>}
             </div>
           : view === 'compare' || view === 'assembly' ? <div role="tabpanel" id={view === 'assembly' ? 'assembly-preview' : 'compare-preview'} aria-labelledby={view === 'assembly' ? 'assembly-tab' : 'compare-tab'}>
               {computation.result ? (view === 'assembly' ? <AssemblyInspector omittedIds={document.omittedPieceIds ?? []} onOmissionsChange={setOmittedPieces} retained={retained!} savedView={comparisonView} asset={asset} setup={setup}

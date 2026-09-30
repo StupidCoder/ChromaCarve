@@ -1,3 +1,4 @@
+import { generateMarkings } from './markings';
 import { suggestedOmissions, omitPieces } from './omissions';
 import { readFileSync } from 'node:fs';
 import { expect, it } from 'vitest';
@@ -53,6 +54,11 @@ it.skipIf(!filename)('repairs the supplied Captain Toad rest pose without losing
     const retained = omitPieces(repaired, suggestedOmissions(repaired));
     expect(retained.pieceCount).toBe(88);
     expect(retained.assembly).toEqual(analyzeAssembly(retained));
+    const markings = generateMarkings(retained);
+    expect(markings.contacts).toHaveLength(96);
+    expect(markings.contacts.filter(c => c.label.length)).toHaveLength(69);
+    expect(markings.contacts.filter(c => c.guides.length)).toHaveLength(82);
+    expect(markings.contacts.some(c => ['18.1','18.8'].includes(c.below) || ['18.1','18.8'].includes(c.above))).toBe(false);
     const plywood = plywoodGeometry(repaired);
     expect(plywood.boundingBox!.max.y - plywood.boundingBox!.min.y).toBeCloseTo(150);
     plywood.dispose();

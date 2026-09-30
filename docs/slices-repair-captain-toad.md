@@ -181,3 +181,16 @@ Suggestions require a narrow piece, area and maximum face contact below 10% of m
 Assembly displays omitted pieces as red stippled ghosts, with a visibility toggle. Compare and Cross-sections use only retained geometry. Contact areas, groups, grounding and warnings are recalculated from retained contacts; IDs and layer positions remain unchanged. Omissions persist with the project and reset after pose or physical setup changes. Future markings and cutting-sheet export must consume the retained result.
 
 Verification: the optional local model test asserts the two suggestions and checks the retained analysis against a fresh geometric analysis. Synthetic tests cover connector removal, protected base pieces, stable IDs and complete omission; persistence tests cover saving and invalidation. Browser checks covered batch and manual omission, red rendering, hiding, restoration and retained Compare geometry.
+
+
+## Hidden markings (milestone 5)
+
+With pieces 18.1 and 18.8 omitted, default 2.5 mm number height and 0.5 mm hidden
+margin, the 88 retained pieces have 96 contacts. The marking layout places both
+IDs on 69 contacts and hidden next-edge guide segments on 82 contacts. There are
+36 contacts with one or both kinds of warning. Some larger next pieces completely
+overhang the current piece, leaving no edge to trace; small contacts lack room
+for two readable IDs. These are explicit review items, not exposed or truncated
+marks. The optional local integration test asserts these counts and verifies
+that omitted IDs cannot receive markings. A local diagnostic run generated the
+layout in approximately 53 ms (not a general performance guarantee).

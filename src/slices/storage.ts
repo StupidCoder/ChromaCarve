@@ -1,3 +1,4 @@
+import { validMarkingSettings, type MarkingSettings } from './geometry/markingSettings';
 import { DEFAULT_SLICE_SETUP, validSliceSetup, type SliceSetup } from './geometry/types';
 
 export interface SlicePose {
@@ -13,6 +14,7 @@ export interface SlicesDocument {
   /** Optional only for milestone-1 projects and incoming model handoffs. */
   setup?: SliceSetup;
   omittedPieceIds?: string[];
+  markingSettings?: MarkingSettings;
 }
 
 const CURRENT = 'current';
@@ -66,6 +68,7 @@ export async function readSlicesDocument(handoff?: string | null): Promise<Slice
   if (doc.setup !== undefined && !validSliceSetup(doc.setup)) {
     throw new Error('The saved physical model settings are invalid. Please choose the model file again.');
   }
+  if (doc.markingSettings !== undefined && !validMarkingSettings(doc.markingSettings)) throw new Error('The saved marking settings are invalid.');
   if (doc.omittedPieceIds !== undefined && (!Array.isArray(doc.omittedPieceIds)
     || doc.omittedPieceIds.length > 10000 || !doc.omittedPieceIds.every(id => typeof id === 'string' && /^\d+\.\d+$/.test(id)))) {
     throw new Error('The saved piece omissions are invalid. Please choose the model file again.');

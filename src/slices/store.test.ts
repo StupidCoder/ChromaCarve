@@ -1,3 +1,4 @@
+import { setMarkingSettings } from './store';
 import { setOmittedPieces } from './store';
 import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -89,4 +90,16 @@ it('saves omissions and clears them when piece identity changes', async () => {
   setSlicesPose({ animationIndex: 0, animationTime: 1 });
   expect(useSlicesStore.getState().document?.omittedPieceIds).toEqual([]);
   await vi.waitFor(() => expect(useSlicesStore.getState().saveStatus).toBe('saved'));
+});
+
+it('persists marking settings without changing slice setup or omissions', async () => {
+  await importSlicesModel(animatedModelFile());
+  const setup = useSlicesStore.getState().document!.setup;
+  setOmittedPieces(['18.1']);
+  setMarkingSettings({ clearanceMm: 0.7, labelHeightMm: 3 });
+  setMarkingSettings({ clearanceMm: 0, labelHeightMm: 3 });
+  expect(useSlicesStore.getState().document?.setup).toBe(setup);
+  expect(useSlicesStore.getState().document?.omittedPieceIds).toEqual(['18.1']);
+  await vi.waitFor(() => expect(useSlicesStore.getState().saveStatus).toBe('saved'));
+  expect((await storage.readSlicesDocument())?.markingSettings).toEqual({ clearanceMm: 0.7, labelHeightMm: 3 });
 });

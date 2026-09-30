@@ -1,3 +1,4 @@
+import { validMarkingSettings, type MarkingSettings } from './geometry/markingSettings';
 import { create } from 'zustand';
 import type { ModelAsset } from '../assets/assetStore';
 import { parseModelFile, type LoadedModel } from '../assets/modelFile';
@@ -124,6 +125,14 @@ export function setOmittedPieces(ids: string[]) {
   const { document, busy } = useSlicesStore.getState();
   if (!document || busy) return;
   const next = { ...document, omittedPieceIds: [...new Set(ids)] };
+  useSlicesStore.setState({ document: next });
+  void persist(next);
+}
+
+export function setMarkingSettings(settings: MarkingSettings) {
+  const { document, busy } = useSlicesStore.getState();
+  if (!document || busy || !validMarkingSettings(settings)) return;
+  const next = { ...document, markingSettings: settings };
   useSlicesStore.setState({ document: next });
   void persist(next);
 }

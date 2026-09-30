@@ -21,12 +21,12 @@ npm test         # vitest unit tests
 ## Slices companion workspace
 
 Open **Slices** in the workspace switcher, or visit **`/slices/`** directly.
-Milestones 1–4 provide model setup, cross-sections, plywood comparison and assembly inspection:
+Milestones 1–5 provide model setup, cross-sections, plywood comparison, assembly inspection and hidden markings:
 GLB/OBJ/STL import, animation-pose selection, an orbitable 3D source preview,
 physical sizing, and automatic browser-local restoration. The **Cross-sections**
 view shows each generated layer, including holes and separate pieces. **Compare**
-shows the original and assembled plywood side by side. Assembly guides and SVG
-cutting sheets are subsequent milestones.
+shows the original and assembled plywood side by side. **Markings** previews hidden
+alignment guides and piece numbers. Nested SVG cutting sheets are the next milestone.
 
 In **Reliefs → Foreground → Model**, use **Open in Slices** to transfer the original
 uploaded model and its selected animation pose. Primitives and bundled models
@@ -306,5 +306,40 @@ or reported assembled dimensions. Both panes retain synchronized cameras; use
 reset when the generated result changes. Analysis errors are shown explicitly and
 do not prevent inspecting otherwise valid geometry in Compare.
 
-Hidden alignment/number markings and cutting-sheet nesting/export remain later
-milestones. No pieces are automatically deleted or bridged by assembly analysis.
+**Suggested omissions** identifies tiny terminal details. You can omit suggestions
+or individual pieces, restore them, and show exclusions as red stippled ghosts.
+Compare, Cross-sections and Markings consume the retained pieces. Contact checks
+update immediately. Omissions are saved and cleared when pose or slicing settings
+change. No pieces are automatically deleted or bridged by assembly analysis.
+
+### Hidden assembly markings (milestone 5)
+
+The **Markings** tab shows top-face cut contours in red and alignment/number paths
+in blue. Choose a layer or enlarge an individual piece. Toggle **Show next layer
+coverage** to inspect where the next pieces cover the current face. A review menu
+jumps to contacts that cannot receive a guide or a complete pair of numbers.
+
+Each positive-area contact gets a separate ID pair: current piece on the first
+line, `>next-piece` on the second. Numbers use single-stroke vector paths, with no
+font dependency. Both rows must fit inside a fully covered rectangle, accounting
+for holes and concave boundaries. A bounded placement search tries horizontal
+and quarter-turn orientations. It may miss a possible placement; missing labels
+are explicitly reported and never clipped or placed on exposed material.
+
+Alignment guides trace only the next piece's inset boundary where supported by
+the current piece. They never substitute an artificial overlap boundary. At the
+default 0.5 mm hidden margin and nominal 0.1 mm marking stroke, the guide centerline
+is 0.55 mm inside the next piece’s material. Allow that offset when aligning
+outer edges and holes.
+Partial guides may not uniquely determine placement, especially for symmetric
+parts. If the next piece overhangs every edge, no next-piece boundary is available
+and the contact is flagged for manual alignment. Tiny contacts may receive no
+marks at all. Pieces with no retained piece above have no top-face markings.
+
+Margin and number height are saved independently of slice settings and omissions.
+Generation runs in a cancellable worker; obsolete results are hidden immediately.
+All geometry stays in the original millimetre slice frame, retaining piece IDs
+and physical layer positions. Nesting/export must transform each piece and its
+mark paths together. The 0.1 mm preview stroke is nominal, not a measured laser
+burn width. Cutting-sheet packing, kerf compensation and SVG download remain
+subsequent work.

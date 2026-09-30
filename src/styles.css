@@ -1106,3 +1106,23 @@ button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
   .slices-preview-tabs { gap: 0; }
   .slices-preview-tabs button { padding-left: 7px; padding-right: 7px; }
 }
+
+/* Markings keep the cross-section workbench and add physical, font-free paths. */
+.marking-settings { display: flex; flex-wrap: wrap; gap: 12px; }
+.marking-settings label { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 115px; }
+.marking-settings input, .marking-settings select { width: 100%; }
+.marking-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
+.marking-actions select { max-width: 240px; }
+.markings-inspector .slice-inspector-toolbar { gap: 10px; }
+.markings-inspector .slice-inspector-toolbar p { margin: 0; }
+.marking-notes { max-height: 155px; overflow: auto; }
+.cut-key { color: #ff5c69; }
+.mark-key { color: #40caff; }
+@media (max-width: 700px) {
+  .slices-preview-tabs { display: grid; grid-template-columns: repeat(3, 1fr); width: 100%; gap: 4px; }
+  .slice-inspector, .slice-comparison { top: 104px; }
+  .model-viewport-reset { top: 104px; }
+  .slices-preview-tabs button { white-space: nowrap; }
+  .markings-inspector .marking-notes { max-height: 110px; }
+  .slices-preview:has(#markings-preview) { min-height: 740px; }
+}
