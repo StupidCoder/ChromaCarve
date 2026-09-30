@@ -343,3 +343,26 @@ and physical layer positions. Nesting/export must transform each piece and its
 mark paths together. The 0.1 mm preview stroke is nominal, not a measured laser
 burn width. Cutting-sheet packing, kerf compensation and SVG download remain
 subsequent work.
+
+
+### Cutting sheets and kerf (milestone 6)
+
+**Sheets** arranges retained pieces on one or more physical sheets. Width, height,
+edge margin, part gap, measured kerf and optional quarter-turns are saved with the
+project. IDs shown on the sheet are preview references, separate from hidden
+physical markings. Locate any piece by ID, including pieces with no hidden label.
+
+The worker runs deterministic MaxRects packing with three ordering heuristics,
+choosing the fewest sheets then the smallest occupied bounding area. Packing uses
+enclosing rectangles; it does not interlock outlines or nest within holes.
+Quarter-turns rotate cuts and markings together without mirroring. Disable them
+to retain a common grain direction. This is a practical layout, not an optimality
+guarantee. Jobs are limited to 2,000 retained pieces and 200 sheets, with bounded
+search and explicit oversize/complexity errors.
+
+Kerf defaults to zero. A nonzero measured cut width offsets outer contours outward
+and hole contours inward by half that width. Hole/topology loss is an error, never
+a silently filled hole. Packing reserves the entire burn envelope plus the part
+gap, and keeps the burn envelope inside the edge margin. Do not apply compensation
+again in laser software when it has already been applied here. Review assembly
+and marking warnings before fabrication; those warnings are not repaired by packing.

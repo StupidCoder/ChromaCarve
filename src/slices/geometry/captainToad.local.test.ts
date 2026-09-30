@@ -1,3 +1,6 @@
+import { createSheetLayout } from './sheets';
+import { DEFAULT_SHEETS } from './sheetSettings';
+import { DEFAULT_MARKINGS } from './markingSettings';
 import { generateMarkings } from './markings';
 import { suggestedOmissions, omitPieces } from './omissions';
 import { readFileSync } from 'node:fs';
@@ -59,6 +62,10 @@ it.skipIf(!filename)('repairs the supplied Captain Toad rest pose without losing
     expect(markings.contacts.filter(c => c.label.length)).toHaveLength(69);
     expect(markings.contacts.filter(c => c.guides.length)).toHaveLength(82);
     expect(markings.contacts.some(c => ['18.1','18.8'].includes(c.below) || ['18.1','18.8'].includes(c.above))).toBe(false);
+    const layout = createSheetLayout(retained, DEFAULT_SHEETS, DEFAULT_MARKINGS);
+    expect(layout.sheets).toHaveLength(2);
+    expect(new Set(layout.sheets.flatMap(s => s.pieces.map(p => p.id))).size).toBe(88);
+    expect(layout.sheets.flatMap(s => s.pieces).some(p => p.id === '18.1' || p.id === '18.8')).toBe(false);
     const plywood = plywoodGeometry(repaired);
     expect(plywood.boundingBox!.max.y - plywood.boundingBox!.min.y).toBeCloseTo(150);
     plywood.dispose();

@@ -1,3 +1,5 @@
+import { setSheetSettings } from './store';
+import { DEFAULT_SHEETS } from './geometry/sheetSettings';
 import { setMarkingSettings } from './store';
 import { setOmittedPieces } from './store';
 import 'fake-indexeddb/auto';
@@ -102,4 +104,16 @@ it('persists marking settings without changing slice setup or omissions', async 
   expect(useSlicesStore.getState().document?.omittedPieceIds).toEqual(['18.1']);
   await vi.waitFor(() => expect(useSlicesStore.getState().saveStatus).toBe('saved'));
   expect((await storage.readSlicesDocument())?.markingSettings).toEqual({ clearanceMm: 0.7, labelHeightMm: 3 });
+});
+
+it('persists sheet settings independently of slice geometry', async () => {
+  await importSlicesModel(animatedModelFile());
+  const setup=useSlicesStore.getState().document!.setup;
+  setOmittedPieces(['18.1']);
+  setSheetSettings({...DEFAULT_SHEETS,widthMm:400,kerfMm:0.15});
+  setSheetSettings({...DEFAULT_SHEETS,widthMm:NaN});
+  await vi.waitFor(() => expect(useSlicesStore.getState().saveStatus).toBe('saved'));
+  expect((await storage.readSlicesDocument())?.sheetSettings?.kerfMm).toBe(0.15);
+  expect(useSlicesStore.getState().document!.setup).toBe(setup);
+  expect(useSlicesStore.getState().document!.omittedPieceIds).toEqual(['18.1']);
 });

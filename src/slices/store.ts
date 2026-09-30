@@ -1,3 +1,4 @@
+import { validSheetSettings, type SheetSettings } from './geometry/sheetSettings';
 import { validMarkingSettings, type MarkingSettings } from './geometry/markingSettings';
 import { create } from 'zustand';
 import type { ModelAsset } from '../assets/assetStore';
@@ -133,6 +134,14 @@ export function setMarkingSettings(settings: MarkingSettings) {
   const { document, busy } = useSlicesStore.getState();
   if (!document || busy || !validMarkingSettings(settings)) return;
   const next = { ...document, markingSettings: settings };
+  useSlicesStore.setState({ document: next });
+  void persist(next);
+}
+
+export function setSheetSettings(settings: SheetSettings) {
+  const { document, busy } = useSlicesStore.getState();
+  if (!document || busy || !validSheetSettings(settings)) return;
+  const next = { ...document, sheetSettings: settings };
   useSlicesStore.setState({ document: next });
   void persist(next);
 }

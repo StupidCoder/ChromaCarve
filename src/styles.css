@@ -1126,3 +1126,23 @@ button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
   .markings-inspector .marking-notes { max-height: 110px; }
   .slices-preview:has(#markings-preview) { min-height: 740px; }
 }
+
+.sheet-controls { flex-shrink: 0; max-height: 43%; overflow: auto; }
+.sheet-controls p { margin: 10px 0; }
+.sheet-fields { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+.sheet-fields label { display: flex; flex-direction: column; gap: 6px; font-size: 11px; }
+.sheet-fields input { width: 100%; min-width: 0; }
+.sheet-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 18px; margin-top: 10px; }
+.sheet-actions > label:not(.toggle) { display: flex; gap: 6px; align-items: center; }
+.sheet-actions select { max-width: 200px; }
+.sheet-notes { max-height: 130px; overflow: auto; font-size: 12px; }
+.sheet-notes details p { text-align: left; }
+@media (max-width: 1100px) { .slices-preview-heading > span { display: none; } }
+@media (max-width: 700px) {
+  .sheet-fields { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .slices-preview:has(#sheets-preview) { min-height: 800px; }
+  .sheet-controls { max-height: 46%; }
+  .sheet-notes { max-height: 130px; }
+}
+.slices-preview-tabs button { white-space: nowrap; padding-left: 10px; padding-right: 10px; }
+@media (min-width: 701px) and (max-width: 1000px) { .slices-preview-tabs button { padding-left: 7px; padding-right: 7px; font-size: 12px; } }

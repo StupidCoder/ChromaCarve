@@ -1,3 +1,5 @@
+import { CuttingSheets } from './CuttingSheets';
+import { DEFAULT_SHEETS } from './geometry/sheetSettings';
 import { MarkingsInspector } from './MarkingsInspector';
 import { DEFAULT_MARKINGS } from './geometry/markingSettings';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -6,7 +8,7 @@ import { ModelViewport } from '../three/ModelViewport';
 import { WorkspaceSwitcher } from '../workspaces/WorkspaceSwitcher';
 import { navigateWorkspace } from '../workspaces/navigation';
 import { removeSlicesHandoff } from './storage';
-import { importSlicesModel, initializeSlices, setOmittedPieces, setMarkingSettings, setSlicesPose, useSlicesStore } from './store';
+import { importSlicesModel, initializeSlices, setOmittedPieces, setMarkingSettings, setSheetSettings, setSlicesPose, useSlicesStore } from './store';
 import { DEFAULT_SLICE_SETUP } from './geometry/types';
 import { PhysicalSetup } from './PhysicalSetup';
 import { LayerInspector } from './LayerInspector';
@@ -18,7 +20,7 @@ import { useSlicing } from './useSlicing';
 export default function SlicesApp({ handoff }: { handoff: string | null }) {
   const { asset, model, document, busy, error, saveStatus } = useSlicesStore();
   const [showColors, setShowColors] = useState(true);
-  const [view, setView] = useState<'source' | 'sections' | 'compare' | 'assembly' | 'markings'>('compare');
+  const [view, setView] = useState<'source' | 'sections' | 'compare' | 'assembly' | 'markings' | 'sheets'>('compare');
   const comparisonView = useRef<ComparisonView | undefined>(undefined);
   useEffect(() => { comparisonView.current = undefined; }, [document?.source]);
   const setup = document?.setup ?? DEFAULT_SLICE_SETUP;
@@ -51,7 +53,7 @@ export default function SlicesApp({ handoff }: { handoff: string | null }) {
           <li aria-current={view === 'source' ? 'step' : undefined}>Model</li>
           <li aria-current={view === 'sections' || view === 'compare' ? 'step' : undefined}>Slices</li>
           <li aria-current={view === 'assembly' || view === 'markings' ? 'step' : undefined}>Assembly</li>
-          <li>Cutting sheets</li>
+          <li aria-current={view === 'sheets' ? 'step' : undefined}>Cutting sheets</li>
         </ol>
         <section className="slices-model-section" aria-labelledby="source-heading">
           <h2 id="source-heading">Source model</h2>
@@ -87,7 +89,7 @@ export default function SlicesApp({ handoff }: { handoff: string | null }) {
         </section>
         {!!document?.omittedPieceIds?.length && <p className="muted">{document.omittedPieceIds.length} pieces omitted · {retained?.pieceCount ?? '…'} retained. Manage omissions in Assembly.</p>}
         <div>{asset && <PhysicalSetup asset={asset} setup={setup} disabled={busy} computation={computation} />}</div>
-        <p className="slices-scope-note">Inspect the plywood shape before building. Inspect assembly contacts in the Assembly view. Review hidden guides and numbers in Markings. Cutting-sheet export is coming next.</p>
+        <p className="slices-scope-note">Inspect the plywood shape before building. Inspect assembly contacts in the Assembly view. Review hidden guides and numbers in Markings. Arrange retained pieces in Sheets.</p>
       </aside>
       <main className="slices-preview" aria-label="Model preview" aria-busy={busy}>
         <div className="slices-preview-heading">
@@ -102,12 +104,18 @@ export default function SlicesApp({ handoff }: { handoff: string | null }) {
               disabled={!asset} onClick={() => setView('assembly')}>Assembly</button>
             <button role="tab" id="markings-tab" aria-selected={view === 'markings'} aria-controls="markings-preview"
               disabled={!asset} onClick={() => setView('markings')}>Markings</button>
+            <button role="tab" id="sheets-tab" aria-selected={view === 'sheets'} aria-controls="sheets-preview"
+              disabled={!asset} onClick={() => setView('sheets')}>Sheets</button>
           </div>
-          <span>{view === 'sections' || view === 'markings' ? '2D layers' : '3D preview'}</span>
+          <span>{view === 'sections' || view === 'markings' || view === 'sheets' ? '2D layers' : '3D preview'}</span>
         </div>
         {asset && document ? (view === 'source'
           ? <div role="tabpanel" id="source-preview" aria-labelledby="source-tab">
               <ModelViewport asset={asset} viewQuaternion={document.viewQuaternion} showColors={showColors} modelRotationDeg={setup.rotationDeg} />
+            </div>
+          : view === 'sheets' ? <div role="tabpanel" id="sheets-preview" aria-labelledby="sheets-tab">
+              {retained ? <CuttingSheets result={retained} settings={document.sheetSettings ?? DEFAULT_SHEETS} markingSettings={document.markingSettings ?? DEFAULT_MARKINGS} onSettingsChange={setSheetSettings} />
+                : <div className="slices-empty"><p role="status">{computation.error ?? 'Generate slices to arrange cutting sheets.'}</p></div>}
             </div>
           : view === 'markings' ? <div role="tabpanel" id="markings-preview" aria-labelledby="markings-tab">
               {retained ? <MarkingsInspector result={retained} settings={document.markingSettings ?? DEFAULT_MARKINGS} onSettingsChange={setMarkingSettings} />
