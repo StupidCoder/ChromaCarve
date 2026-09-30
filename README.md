@@ -21,11 +21,12 @@ npm test         # vitest unit tests
 ## Slices companion workspace
 
 Open **Slices** in the workspace switcher, or visit **`/slices/`** directly.
-Milestones 1–2 provide independent model setup and cross-section generation:
+Milestones 1–3 provide independent model setup, cross-sections and a plywood comparison:
 GLB/OBJ/STL import, animation-pose selection, an orbitable 3D source preview,
 physical sizing, and automatic browser-local restoration. The **Cross-sections**
-view shows each generated layer, including holes and separate pieces. The assembled
-plywood comparison, assembly guides, and SVG cutting sheets are subsequent milestones.
+view shows each generated layer, including holes and separate pieces. **Compare**
+shows the original and assembled plywood side by side. Assembly guides and SVG
+cutting sheets are subsequent milestones.
 
 In **Reliefs → Foreground → Model**, use **Open in Slices** to transfer the original
 uploaded model and its selected animation pose. Primitives and bundled models
@@ -49,6 +50,29 @@ domain. The existing deployment pipeline should publish the nested entry along
 with shared assets. Tests cover parser ownership, original-source retention,
 handoff isolation, pose restoration, storage-failure recovery, slicing geometry,
 and worker cancellation.
+
+### Plywood comparison
+
+**Compare** uses the actual cross-section contours, extruded to measured material
+thickness, with holes, disconnected pieces and empty-layer gaps preserved. It adds
+no bevels or gaps between touching sheets. Neutral wood shading makes the stair
+steps visible; **Show model colors** toggles the original GLB/OBJ materials.
+
+Drag, scroll or right-drag either pane to rotate, zoom or pan both cameras together.
+Focus a pane and use the arrow keys to pan. **Reset view** fits both models to one
+common frame. Both panes always use the same scale and camera target; neither
+model is independently resized to conceal differences. On narrow screens the
+panes stack vertically. The caption reports layers, pieces and actual plywood
+bounds in width × height × depth order.
+
+Changes to pose, size, rotation, thickness or sampling offset rebuild the preview
+in a cancellable worker and discard outdated geometry. Camera orientation, zoom
+and pan survive these changes and preview-tab switches within the workspace.
+Size changes retain framing relative to the requested longest dimension. Invalid
+sections block the assembled preview; inspect them in **Cross-sections**. Empty
+results and excessive preview complexity produce an actionable message. The
+preview predicts shape only: glue, kerf, material variation, structural support
+and assembly feasibility are not simulated yet.
 
 ### Physical setup and cross-sections
 

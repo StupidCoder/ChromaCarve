@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ModelPoseControls } from '../components/ModelPoseControls';
 import { ModelViewport } from '../three/ModelViewport';
 import { WorkspaceSwitcher } from '../workspaces/WorkspaceSwitcher';
@@ -8,12 +8,15 @@ import { importSlicesModel, initializeSlices, setSlicesPose, useSlicesStore } fr
 import { DEFAULT_SLICE_SETUP } from './geometry/types';
 import { PhysicalSetup } from './PhysicalSetup';
 import { LayerInspector } from './LayerInspector';
+import { ComparisonViewport, type ComparisonView } from './ComparisonViewport';
 import { useSlicing } from './useSlicing';
 
 export default function SlicesApp({ handoff }: { handoff: string | null }) {
   const { asset, model, document, busy, error, saveStatus } = useSlicesStore();
   const [showColors, setShowColors] = useState(true);
-  const [view, setView] = useState<'source' | 'sections'>('source');
+  const [view, setView] = useState<'source' | 'sections' | 'compare'>('compare');
+  const comparisonView = useRef<ComparisonView | undefined>(undefined);
+  useEffect(() => { comparisonView.current = undefined; }, [document?.source]);
   const setup = document?.setup ?? DEFAULT_SLICE_SETUP;
   const computation = useSlicing(asset, setup, !busy);
   useEffect(() => {
@@ -41,7 +44,7 @@ export default function SlicesApp({ handoff }: { handoff: string | null }) {
         <p className="slices-intro">Start with a 3D model.<br />Choose the pose you want to build.</p>
         <ol className="slices-steps" aria-label="Workflow">
           <li aria-current={view === 'source' ? 'step' : undefined}>Model</li>
-          <li aria-current={view === 'sections' ? 'step' : undefined}>Slices</li>
+          <li aria-current={view !== 'source' ? 'step' : undefined}>Slices</li>
           <li>Assembly <span>Coming next</span></li>
           <li>Cutting sheets</li>
         </ol>
@@ -78,21 +81,29 @@ export default function SlicesApp({ handoff }: { handoff: string | null }) {
           </>}
         </section>
         <div>{asset && <PhysicalSetup asset={asset} setup={setup} disabled={busy} computation={computation} />}</div>
-        <p className="slices-scope-note">The assembled plywood comparison, assembly analysis and cutting-sheet export are coming in the next milestones.</p>
+        <p className="slices-scope-note">Inspect the plywood shape before building. Assembly analysis and cutting-sheet export are coming in the next milestones.</p>
       </aside>
       <main className="slices-preview" aria-label="Model preview" aria-busy={busy}>
         <div className="slices-preview-heading">
           <div className="slices-preview-tabs" role="tablist" aria-label="Preview">
             <button role="tab" id="source-tab" aria-selected={view === 'source'} aria-controls="source-preview"
               onClick={() => setView('source')}>Source model</button>
+            <button role="tab" id="compare-tab" aria-selected={view === 'compare'} aria-controls="compare-preview"
+              disabled={!asset} onClick={() => setView('compare')}>Compare</button>
             <button role="tab" id="sections-tab" aria-selected={view === 'sections'} aria-controls="sections-preview"
               disabled={!asset} onClick={() => setView('sections')}>Cross-sections</button>
           </div>
-          <span>{view === 'source' ? '3D preview' : '2D layers'}</span>
+          <span>{view === 'sections' ? '2D layers' : '3D preview'}</span>
         </div>
         {asset && document ? (view === 'source'
           ? <div role="tabpanel" id="source-preview" aria-labelledby="source-tab">
               <ModelViewport asset={asset} viewQuaternion={document.viewQuaternion} showColors={showColors} modelRotationDeg={setup.rotationDeg} />
+            </div>
+          : view === 'compare' ? <div role="tabpanel" id="compare-preview" aria-labelledby="compare-tab">
+              {computation.result ? <ComparisonViewport savedView={comparisonView} asset={asset} setup={setup}
+                result={computation.result} showColors={showColors} viewQuaternion={document.viewQuaternion} />
+                : <div className="slices-empty"><p role="status">{computation.error ?? (computation.status === 'cancelled'
+                  ? 'Slicing cancelled. Use Retry slicing to continue.' : computation.progress?.phase ?? 'Preparing comparison…')}</p></div>}
             </div>
           : <div role="tabpanel" id="sections-preview" aria-labelledby="sections-tab">
               {computation.result ? <LayerInspector result={computation.result} /> : <div className="slices-empty">
