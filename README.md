@@ -74,6 +74,26 @@ results and excessive preview complexity produce an actionable message. The
 preview predicts shape only: glue, kerf, material variation, structural support
 and assembly feasibility are not simulated yet.
 
+### Optional section repair
+
+For game models with overlapping parts or hidden openings, enable **Repair
+overlapping / open sections** in Physical setup. Closed regions are unioned;
+nearby matching endpoints are stitched. An open patch is filled only when its
+closing edge is supported by existing material within the chosen **Repair
+tolerance** (default 0.5 mm). Narrow strips attach nearby patches to the underlying
+solid. Large unsupported openings and ambiguous branching paths remain errors.
+
+Use **Cross-sections → Show original contours and repair connections** to compare
+the repaired fill with the original segments. The same repaired pieces feed the
+plywood comparison. This changes only derived sections, never the source model.
+It preserves cavities and disconnected pieces and does not establish assembly
+strength. Repair settings are saved; disabling repair restores strict slicing.
+
+The [Captain Toad investigation](docs/slices-repair-captain-toad.md) documents all
+50 default layers: 1 mm repair resolves every layer in the supplied rest pose,
+while 0.5 mm leaves two eye-area paths unresolved on layer 26. Other poses may
+still need attention. The copyrighted fixture is not shipped with the app.
+
 ### Physical setup and cross-sections
 
 - **Longest side:** sets the physical size in millimetres before rotation, with
@@ -101,7 +121,7 @@ physical scale and model rotation are applied in the worker. Changes cancel
 outdated work immediately and start a new job after a short debounce. The UI
 also provides **Cancel slicing** and **Retry slicing**.
 
-The first engine supports clean, consistently oriented, closed triangle meshes,
+Strict mode supports clean, consistently oriented, closed triangle meshes,
 including disconnected components and correctly oriented cavities. It checks
 welded mesh boundaries, face winding, and contour connectivity/intersections.
 Outer contours wind counterclockwise in the slice frame (X, −Z); holes wind

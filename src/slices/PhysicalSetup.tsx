@@ -42,6 +42,17 @@ export function PhysicalSetup({ asset, setup, disabled, computation }: {
         min={-setup.thicknessMm / 2} max={setup.thicknessMm / 2} step={0.05}
         onChange={(samplingOffsetMm) => setSliceSetup({ samplingOffsetMm })} />
       <p className="muted">Zero samples each layer’s midpoint. Offset moves the sample within the fixed plywood layer (±{mm(setup.thicknessMm / 2)} mm).</p>
+      <div className="slice-repair-settings">
+        <label className="toggle"><input type="checkbox" checked={setup.repairMode === 'automatic'}
+          onChange={(event) => setSliceSetup({ repairMode: event.target.checked ? 'automatic' : 'strict' })} />
+          Repair overlapping / open sections</label>
+        <p className="muted">Union solid outlines, stitch nearby seams and attach supported open patches. The source model stays unchanged.</p>
+        {setup.repairMode === 'automatic' && <>
+          <NumberField label="Repair tolerance (mm)" value={setup.repairGapMm ?? 0.5} min={0} max={10} step={0.1}
+            onChange={(repairGapMm) => setSliceSetup({ repairGapMm })} />
+          <p className="muted">Maximum seam gap or distance from an open patch’s closing edge to existing material. Start small and inspect the repaired contours. Large unsupported openings remain errors.</p>
+        </>}
+      </div>
     </fieldset>
     <SliceSummary computation={computation} thickness={setup.thicknessMm} />
   </section>;
@@ -61,7 +72,7 @@ export function SliceSummary({ computation, thickness }: { computation: SlicingC
   if (!result) return null;
   return <div className="slices-summary">
     <p className={result.valid ? 'slices-ready' : 'warn'} role="status">
-      {result.valid ? 'Cross-sections ready' : 'Mesh or contours need attention'}
+      {result.valid ? (result.layers.some((layer) => layer.repair) ? 'Repaired sections ready — review outlines' : 'Cross-sections ready') : 'Mesh or contours need attention'}
     </p>
     <dl>
       <div><dt>Layers / pieces</dt><dd>{result.layers.length} / {result.pieceCount}</dd></div>

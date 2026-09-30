@@ -5,6 +5,7 @@ import { mm } from './PhysicalSetup';
 const ringPath = (ring: Point2[]) => `M${ring.map((point) => point.join(',')).join('L')}Z`;
 
 export function LayerInspector({ result }: { result: SliceResult }) {
+  const [showOriginal, setShowOriginal] = useState(false);
   const [fraction, setFraction] = useState(0.5);
   const index = Math.round(fraction * (result.layers.length - 1));
   const layer = result.layers[index];
@@ -24,6 +25,8 @@ export function LayerInspector({ result }: { result: SliceResult }) {
         <span>Sample Y: {mm(layer.sampleMm)} mm</span>
         <span>Slab: {mm(layer.bottomMm)} to {mm(layer.topMm)} mm</span>
       </div>
+      {layer.repair && <label className="toggle"><input type="checkbox" checked={showOriginal}
+        onChange={(event) => setShowOriginal(event.target.checked)} />Show original contours and repair connections</label>}
       {result.layers.some((candidate) => !candidate.valid) && <select aria-label="Jump to problem layer" value=""
         onChange={(event) => {
           if (event.target.value !== '') setFraction(Number(event.target.value) / Math.max(1, result.layers.length - 1));
@@ -41,13 +44,21 @@ export function LayerInspector({ result }: { result: SliceResult }) {
             d={[ringPath(piece.outer), ...piece.holes.map(ringPath)].join(' ')} fillRule="evenodd" vectorEffect="non-scaling-stroke">
             <title>Piece {piece.id}: {mm(piece.areaMm2)} mm²; {piece.holes.length} holes</title>
           </path>)}
-          {layer.invalidSegments && <path className="slice-invalid" vectorEffect="non-scaling-stroke"
+          {showOriginal && layer.repair && <>
+            <path className="slice-original" vectorEffect="non-scaling-stroke"
+              d={layer.repair.originalSegments.map(([a, b]) => `M${a.join(',')}L${b.join(',')}`).join(' ')} />
+            <path className="slice-bridges" vectorEffect="non-scaling-stroke"
+              d={layer.repair.bridges.map(([a, b]) => `M${a.join(',')}L${b.join(',')}`).join(' ')} />
+          </>}
+          {layer.invalidSegments && !(showOriginal && layer.repair) && <path className="slice-invalid" vectorEffect="non-scaling-stroke"
             d={layer.invalidSegments.map(([a, b]) => `M${a.join(',')}L${b.join(',')}`).join(' ')} />}
         </g>
       </svg>
       {layer.valid && !layer.pieces.length && <p className="slice-no-pieces">No material at this sampling plane.</p>}
     </div>
     <div className="slice-inspector-notes">
+      {layer.repair && <p className="muted">{layer.repair.closedLoops} closed outlines processed · {layer.repair.shortGaps} seams joined · {layer.repair.attachedPaths} open paths attached / absorbed · {layer.repair.unresolvedPaths} unresolved.
+        {showOriginal && ' Orange: original contours. Pink: added closing edges. Blue: repaired material, including any narrow attachment strips.'}</p>}
       {!result.valid && <p className="warn">Diagnostic preview only. Resolve the reported geometry problems before fabrication.</p>}
       {issues.map((issue) => <p className="warn" key={issue.code}>{issue.message}</p>)}
       <p className="muted">Top view of each layer. All layers share the same scale and origin. Holes stay empty; disconnected regions stay separate.</p>

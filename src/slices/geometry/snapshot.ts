@@ -1,5 +1,5 @@
 import type { BufferGeometry } from 'three';
-import { MAX_SLICE_TRIANGLES } from './sliceMesh';
+import { MAX_SLICE_TRIANGLES } from './limits';
 import type { SliceInput, SliceSetup } from './types';
 
 /** GLB assets already bake skinning, morphs and node transforms into this pose. */

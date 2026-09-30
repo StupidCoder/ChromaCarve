@@ -1,8 +1,9 @@
+import { repairContours } from './repairContours';
 import { buildContours, PointWelder } from './contours';
 import { validSliceSetup, type Point2, type Point3, type SliceInput, type SliceIssue, type SliceLayer, type SliceProgress, type SliceResult } from './types';
 
-export const MAX_SLICE_LAYERS = 2000;
-export const MAX_SLICE_TRIANGLES = 1_000_000;
+import { MAX_SLICE_LAYERS, MAX_SLICE_TRIANGLES } from './limits';
+export { MAX_SLICE_LAYERS, MAX_SLICE_TRIANGLES } from './limits';
 
 /** Center full-thickness slabs around the model; sample offset never moves slabs. */
 export function planLayers(min: number, max: number, thickness: number, offset = 0) {
@@ -108,7 +109,9 @@ export function sliceMesh(input: SliceInput, progress: (value: SliceProgress) =>
     else if (edge.count > 2) nonManifold++;
     else if (edge.direction !== 0) inconsistent++;
   }
-  if (open) issues.push({ code: 'open-mesh', severity: 'error', message: `${open.toLocaleString()} open mesh edges. Close the holes before using these sections for fabrication.` });
+  if (open) issues.push({ code: 'open-mesh', severity: setup.repairMode === 'automatic' ? 'warning' : 'error', message: setup.repairMode === 'automatic'
+    ? `${open.toLocaleString()} open mesh edges. Repair infers filled 2D sections; the source mesh is unchanged. Inspect the repaired outlines.`
+    : `${open.toLocaleString()} open mesh edges. Close the holes or enable section repair before using these sections for fabrication.` });
   if (nonManifold) issues.push({ code: 'non-manifold', severity: 'error', message: `${nonManifold.toLocaleString()} edges have more than two faces. Repair touching or duplicate surfaces.` });
   if (inconsistent) issues.push({ code: 'winding', severity: 'error', message: `${inconsistent.toLocaleString()} edges have inconsistent face orientation. Repair the mesh normals.` });
   if (degenerate) issues.push({ code: 'degenerate-triangles', severity: 'error', message: `${degenerate.toLocaleString()} collapsed triangles were excluded. Repair or simplify the mesh before fabrication.` });
@@ -130,12 +133,33 @@ export function sliceMesh(input: SliceInput, progress: (value: SliceProgress) =>
     }
     totalSegments += segments.length;
     if (totalSegments > 2_000_000) throw new Error('This setup produces too many contour segments. Increase thickness or simplify the model.');
-    const contours = buildContours(segments, epsilon, index);
-    if (contours.error) issues.push({ code: contours.code!, severity: 'error', layer: index, message: contours.error });
+    let pieces: SliceLayer['pieces'] = [], error: string | undefined, code: string | undefined;
+    let repair: SliceLayer['repair'];
+    if (setup.repairMode === 'automatic') {
+      try {
+        const { pieces: fixed, ...details } = repairContours(segments, epsilon, index, setup.repairGapMm ?? 0.5);
+        pieces = fixed; repair = { ...details, originalSegments: segments };
+        if (details.unresolvedPaths) {
+          code = 'unresolved-repair';
+          error = `${details.unresolvedPaths} open paths cannot be repaired within the tolerance. Inspect the original contours; adjust tolerance, orientation or the source mesh.`;
+        }
+      } catch (failure) {
+        code = 'repair-failed'; error = failure instanceof Error ? failure.message : 'Could not repair this layer.';
+      }
+    } else {
+      const contours = buildContours(segments, epsilon, index);
+      pieces = contours.pieces; error = contours.error; code = contours.code;
+    }
+    if (error) issues.push({ code: code!, severity: 'error', layer: index, message: error });
     layers.push({ index, sampleMm, bottomMm: plan.bottom + index * setup.thicknessMm,
-      topMm: plan.bottom + (index + 1) * setup.thicknessMm, pieces: contours.pieces, valid: !contours.error,
-      ...(contours.error ? { invalidSegments: segments } : {}) });
+      topMm: plan.bottom + (index + 1) * setup.thicknessMm, pieces, valid: !error,
+      ...(repair ? { repair } : {}), ...(error ? { invalidSegments: segments } : {}) });
     progress({ fraction: 0.4 + 0.6 * (index + 1) / plan.count, phase: `Slicing layer ${index + 1} of ${plan.count}` });
+  }
+  if (setup.repairMode === 'automatic') {
+    const attached = layers.reduce((sum, layer) => sum + (layer.repair?.attachedPaths ?? 0), 0);
+    const gaps = layers.reduce((sum, layer) => sum + (layer.repair?.shortGaps ?? 0), 0);
+    issues.push({ code: 'section-repair', severity: 'warning', message: `Section repair enabled: closed regions unioned, ${gaps} small seams joined, ${attached} open paths attached or absorbed. Tolerance ${setup.repairGapMm ?? 0.5} mm. Review the original-contour overlay; this is an inferred shape, not a guarantee of assembly strength.` });
   }
   const populated = layers.filter((layer) => layer.pieces.length);
   const emptyLayers = layers.filter((layer) => layer.valid && !layer.pieces.length).length;

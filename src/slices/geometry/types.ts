@@ -9,6 +9,9 @@ export interface SliceSetup {
   rotationDeg: Point3;
   /** Sample within each fixed slab; zero is its midpoint. */
   samplingOffsetMm: number;
+  /** Optional for previously saved projects; strict slicing remains the default. */
+  repairMode?: 'strict' | 'automatic';
+  repairGapMm?: number;
 }
 
 export const DEFAULT_SLICE_SETUP: SliceSetup = {
@@ -21,6 +24,8 @@ export function validSliceSetup(value: unknown): value is SliceSetup {
     && Number.isFinite(s.thicknessMm) && s.thicknessMm >= 0.05 && s.thicknessMm <= 100
     && Array.isArray(s.rotationDeg) && s.rotationDeg.length === 3
     && s.rotationDeg.every((angle) => Number.isFinite(angle) && Math.abs(angle) <= 180)
+    && (s.repairMode === undefined || s.repairMode === 'strict' || s.repairMode === 'automatic')
+    && (s.repairGapMm === undefined || (Number.isFinite(s.repairGapMm) && s.repairGapMm >= 0 && s.repairGapMm <= 10))
     && Number.isFinite(s.samplingOffsetMm) && Math.abs(s.samplingOffsetMm) <= s.thicknessMm / 2;
 }
 
@@ -55,6 +60,14 @@ export interface SliceLayer {
   valid: boolean;
   /** Failed contours are shown as lines, never silently closed or filled. */
   invalidSegments?: [Point2, Point2][];
+  repair?: {
+    originalSegments: [Point2, Point2][];
+    bridges: [Point2, Point2][];
+    closedLoops: number;
+    attachedPaths: number;
+    shortGaps: number;
+    unresolvedPaths: number;
+  };
 }
 
 export interface SliceResult {

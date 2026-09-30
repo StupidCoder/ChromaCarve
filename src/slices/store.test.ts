@@ -63,3 +63,16 @@ it('keeps physical setup through pose edits and bounds offsets to the measured t
   expect(useSlicesStore.getState().document?.setup?.thicknessMm).toBe(1);
   await vi.waitFor(() => expect(useSlicesStore.getState().saveStatus).toBe('saved'));
 });
+
+it('updates repair-only settings, persists them and rejects invalid tolerances', async () => {
+  await importSlicesModel(animatedModelFile());
+  setSliceSetup({ repairMode: 'automatic', repairGapMm: 1 });
+  expect(useSlicesStore.getState().document?.setup?.repairMode).toBe('automatic');
+  setSliceSetup({ repairGapMm: -1 });
+  expect(useSlicesStore.getState().document?.setup?.repairGapMm).toBe(1);
+  await vi.waitFor(() => expect(useSlicesStore.getState().saveStatus).toBe('saved'));
+  expect((await storage.readSlicesDocument())?.setup?.repairGapMm).toBe(1);
+  setSliceSetup({ repairMode: 'strict' });
+  expect(useSlicesStore.getState().document?.setup?.repairMode).toBe('strict');
+  await vi.waitFor(() => expect(useSlicesStore.getState().saveStatus).toBe('saved'));
+});

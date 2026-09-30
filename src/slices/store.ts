@@ -113,6 +113,7 @@ export function setSliceSetup(patch: Partial<SliceSetup>) {
   const previous = document.setup;
   if (previous && previous.sizeMm === setup.sizeMm && previous.thicknessMm === setup.thicknessMm
     && previous.samplingOffsetMm === setup.samplingOffsetMm
+    && previous.repairMode === setup.repairMode && previous.repairGapMm === setup.repairGapMm
     && previous.rotationDeg.every((angle, i) => angle === setup.rotationDeg[i])) return;
   const next = { ...document, setup };
   useSlicesStore.setState({ document: next });
