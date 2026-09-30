@@ -170,3 +170,14 @@ two floating pieces. Use Assembly's piece selector or Next review piece to see t
 individual warnings and measured contact areas. Exploded spacing and layer reveal
 help inspect them without modifying the repaired outlines. Adding supports,
 removing unwanted fragments or choosing a different pose remains a user decision.
+
+
+## Suggested omissions
+
+With the same 150 mm / 3 mm / 1 mm repair setup, the conservative omission filter suggests exactly **18.1 and 18.8**. Each is approximately 0.26 × 1.90 mm in outline, with 0.45 mm² area and one contact to 19.1 above. Omitting both leaves 88 pieces in the same three connected groups, with 15 remaining warning pieces. The floating pieces 18.2 and 18.7 remain separate review items.
+
+Suggestions require a narrow piece, area and maximum face contact below 10% of material thickness squared, at most one neighboring piece, and a layer above the base. This screens fabrication difficulty and avoids suggesting connectors; it does not estimate perceptual importance. Users review the visual effect and can override individual omissions.
+
+Assembly displays omitted pieces as red stippled ghosts, with a visibility toggle. Compare and Cross-sections use only retained geometry. Contact areas, groups, grounding and warnings are recalculated from retained contacts; IDs and layer positions remain unchanged. Omissions persist with the project and reset after pose or physical setup changes. Future markings and cutting-sheet export must consume the retained result.
+
+Verification: the optional local model test asserts the two suggestions and checks the retained analysis against a fresh geometric analysis. Synthetic tests cover connector removal, protected base pieces, stable IDs and complete omission; persistence tests cover saving and invalidation. Browser checks covered batch and manual omission, red rendering, hiding, restoration and retained Compare geometry.

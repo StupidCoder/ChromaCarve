@@ -7,7 +7,7 @@ import { physicalModelMatrix } from './geometry/plywood';
 import type { SliceResult, SliceSetup } from './geometry/types';
 import { mm } from './PhysicalSetup';
 
-export interface AssemblyView { gapMm: number; layersShown: number; selectedPiece: number; highlightWarnings: boolean }
+export interface AssemblyView { gapMm: number; layersShown: number; selectedPiece: number; highlightWarnings: boolean; omittedIds?: string[]; showOmitted?: boolean; reviewIds?: string[] }
 export type ComparisonView = { position: THREE.Vector3; up: THREE.Vector3; target: THREE.Vector3 };
 
 export function ComparisonViewport({ asset, setup, result, showColors, viewQuaternion, savedView, inspection, controlsSlot }: {
@@ -39,6 +39,7 @@ export function ComparisonViewport({ asset, setup, result, showColors, viewQuate
         const warnings = new Float32Array(data.pieceIds.length);
         for (let i = 0; i < warnings.length; i++) warnings[i] = result.assembly?.pieces[data.pieceIds[i]]?.warnings.length ? 1 : 0;
         geometry.setAttribute('sliceWarning', new THREE.BufferAttribute(warnings, 1));
+        geometry.setAttribute('sliceOmitted', new THREE.BufferAttribute(new Float32Array(data.pieceIds.length), 1));
         geometry.computeBoundingBox();
         setBuilt({ result, geometry });
       }
@@ -74,13 +75,13 @@ export function ComparisonViewport({ asset, setup, result, showColors, viewQuate
     });
     const neutral = new THREE.MeshStandardMaterial({ color: 0xb9bec9, roughness: 0.8, side: THREE.DoubleSide });
     const wood = new THREE.MeshStandardMaterial({ color: 0xc8aa7d, roughness: 0.9 });
-    const uniforms = { gapMm: { value: 0 }, layersShown: { value: result.layers.length }, selectedPiece: { value: -1 }, highlightWarnings: { value: 0 } };
+    const uniforms = { gapMm: { value: 0 }, layersShown: { value: result.layers.length }, selectedPiece: { value: -1 }, highlightWarnings: { value: 0 }, showOmitted: { value: 1 } };
     wood.onBeforeCompile = (shader) => {
       Object.assign(shader.uniforms, uniforms);
-      shader.vertexShader = 'attribute float sliceLayer; attribute float slicePiece; attribute float sliceWarning; uniform float gapMm; varying float vSliceLayer; varying float vSlicePiece; varying float vSliceWarning;\n' + shader.vertexShader;
-      shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n transformed.y += sliceLayer * gapMm; vSliceLayer = sliceLayer; vSlicePiece = slicePiece; vSliceWarning = sliceWarning;');
-      shader.fragmentShader = 'uniform float layersShown; uniform float selectedPiece; uniform float highlightWarnings; varying float vSliceLayer; varying float vSlicePiece; varying float vSliceWarning;\n' + shader.fragmentShader;
-      shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\n if (vSliceLayer >= layersShown) discard; if (highlightWarnings > 0.5 && vSliceWarning > 0.5) diffuseColor.rgb = vec3(0.95,0.36,0.12); if (abs(vSlicePiece-selectedPiece) < 0.25) diffuseColor.rgb = vec3(0.12,0.7,1.0);');
+      shader.vertexShader = 'attribute float sliceOmitted; varying float vSliceOmitted; attribute float sliceLayer; attribute float slicePiece; attribute float sliceWarning; uniform float gapMm; varying float vSliceLayer; varying float vSlicePiece; varying float vSliceWarning;\n' + shader.vertexShader;
+      shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n vSliceOmitted = sliceOmitted; transformed.y += sliceLayer * gapMm; vSliceLayer = sliceLayer; vSlicePiece = slicePiece; vSliceWarning = sliceWarning;');
+      shader.fragmentShader = 'varying float vSliceOmitted; uniform float showOmitted; uniform float layersShown; uniform float selectedPiece; uniform float highlightWarnings; varying float vSliceLayer; varying float vSlicePiece; varying float vSliceWarning;\n' + shader.fragmentShader;
+      shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\n if (vSliceLayer >= layersShown) discard; if (highlightWarnings > 0.5 && vSliceWarning > 0.5) diffuseColor.rgb = vec3(0.95,0.36,0.12); if (abs(vSlicePiece-selectedPiece) < 0.25) diffuseColor.rgb = vec3(0.12,0.7,1.0); if (vSliceOmitted > 0.5) { if (showOmitted < 0.5 || mod(floor(gl_FragCoord.x) + floor(gl_FragCoord.y), 2.0) < 1.0) discard; diffuseColor.rgb = vec3(1.0,0.03,0.03); }');
     };
     const source: THREE.Mesh = new THREE.Mesh(asset.geometry, neutral);
     source.matrixAutoUpdate = false;
@@ -99,7 +100,23 @@ export function ComparisonViewport({ asset, setup, result, showColors, viewQuate
     let studio: THREE.WebGLRenderTarget | undefined;
     const bounds = new THREE.Box3().setFromObject(source).union(new THREE.Box3().setFromObject(plywood));
     const sphere = bounds.getBoundingSphere(new THREE.Sphere());
+    let previousInspection: AssemblyView | undefined;
+    const sourcePieces = result.layers.flatMap(l => l.pieces);
     const render = () => {
+      if (previousInspection !== inspect.current) {
+        previousInspection = inspect.current;
+        const omitted = new Set(inspect.current?.omittedIds ?? []);
+        const review = inspect.current?.reviewIds && new Set(inspect.current.reviewIds);
+        const ids = geometry.getAttribute('slicePiece');
+        const flags = geometry.getAttribute('sliceOmitted'), warnings = geometry.getAttribute('sliceWarning');
+        for (let i = 0; i < ids.count; i++) {
+          const index = ids.getX(i), id = sourcePieces[index].id;
+          flags.setX(i, omitted.has(id) ? 1 : 0);
+          warnings.setX(i, (review ? review.has(id) : !!result.assembly?.pieces[index]?.warnings.length) ? 1 : 0);
+        }
+        flags.needsUpdate = true; warnings.needsUpdate = true;
+      }
+      uniforms.showOmitted.value = inspect.current?.showOmitted === false ? 0 : 1;
       uniforms.gapMm.value = inspect.current?.gapMm ?? 0;
       uniforms.layersShown.value = inspect.current?.layersShown ?? result.layers.length;
       uniforms.selectedPiece.value = inspect.current?.selectedPiece ?? -1;
@@ -175,7 +192,7 @@ export function ComparisonViewport({ asset, setup, result, showColors, viewQuate
   }, [geometry, asset, setup, viewQuaternion, savedView]);
   useEffect(() => { refresh.current?.(); }, [showColors, inspection]);
 
-  const error = !result.valid ? 'Resolve the errors in Cross-sections to preview the complete plywood model.' : built?.result === result ? built.error : undefined;
+  const error = !result.pieceCount ? 'All pieces are omitted. Restore pieces in Assembly to preview the model.' : !result.valid ? 'Resolve the errors in Cross-sections to preview the complete plywood model.' : built?.result === result ? built.error : undefined;
   const dimensions = geometry?.boundingBox?.getSize(new THREE.Vector3());
   return <div className="slice-comparison">
     <div className="comparison-toolbar"><span>Same scale · Linked cameras</span><button onClick={() => reset.current?.()} disabled={!geometry}>Reset view</button></div>
@@ -185,6 +202,6 @@ export function ComparisonViewport({ asset, setup, result, showColors, viewQuate
       <div className="comparison-pane" ref={right} tabIndex={0} role="img" aria-label="Plywood model. Drag to rotate both models. Arrow keys to pan."><span>Plywood · {mm(setup.thicknessMm)} mm layers</span></div>
       {(error || renderError || !geometry) && <div className="comparison-status" role="status">{error || renderError || 'Building plywood preview…'}</div>}
     </div>
-    <p className="comparison-caption">{dimensions ? `${result.layers.length} layers · ${result.pieceCount} pieces · ${mm(dimensions.x)} × ${mm(dimensions.y)} × ${mm(dimensions.z)} mm (W × H × D)` : 'Exact slice contours at measured material thickness.'}{inspection && ' · Assembled dimensions; exploded gaps are visual only.'}<br />Drag either model to orbit · Scroll to zoom · Right-drag or arrow keys to pan</p>
+    <p className="comparison-caption">{dimensions ? `${result.layers.length} layers · ${result.pieceCount - (inspection?.omittedIds?.length ?? 0)} retained pieces · ${mm(dimensions.x)} × ${mm(dimensions.y)} × ${mm(dimensions.z)} mm (W × H × D)` : 'Exact slice contours at measured material thickness.'}{inspection && ' · Original stack dimensions; omissions and exploded gaps are visualized above.'}<br />Drag either model to orbit · Scroll to zoom · Right-drag or arrow keys to pan</p>
   </div>;
 }

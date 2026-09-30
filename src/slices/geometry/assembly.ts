@@ -1,3 +1,4 @@
+import { assemblyFromContacts } from './assemblyContacts';
 import ClipperLib from 'clipper-lib';
 import { polygonBoolean } from './polygonBoolean';
 import { signedArea } from './contours';
@@ -25,13 +26,6 @@ export function analyzeAssembly(result: SliceResult): AssemblyAnalysis {
   const pieces: AssemblyPiece[] = sources.map(({ piece, layer }) => ({ id: piece.id, layer, group: 0, grounded: false,
     belowMm2: 0, aboveMm2: 0, areaMm2: piece.areaMm2, warnings: [] }));
   const lookup = new Map(pieces.map((piece, i) => [piece.id, i]));
-  const parents = pieces.map((_, i) => i);
-  const root = (i: number): number => {
-    let current = i;
-    while (parents[current] !== current) current = parents[current];
-    while (parents[i] !== i) { const next = parents[i]; parents[i] = current; i = next; }
-    return current;
-  };
   const contacts: AssemblyContact[] = [];
   const bounds = new Map(sources.map(({ piece }) => [piece.id, piece.outer.reduce((b,[x,y]) => ({ minX: Math.min(b.minX,x), maxX: Math.max(b.maxX,x), minY: Math.min(b.minY,y), maxY: Math.max(b.maxY,y) }), { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity })]));
   let work = 0;
@@ -47,19 +41,10 @@ export function analyzeAssembly(result: SliceResult): AssemblyAnalysis {
       if (area <= epsilon * epsilon * 16) continue; // Point/edge contact cannot hold glue.
       const ai = lookup.get(a.id)!, bi = lookup.get(b.id)!;
       pieces[ai].aboveMm2 += area; pieces[bi].belowMm2 += area;
-      parents[root(bi)] = root(ai);
       contacts.push({ below: a.id, above: b.id, areaMm2: area });
     }
   }
-  const groups = new Map<number, number>();
-  const grounded = new Set(pieces.flatMap((p,i) => p.layer === 0 ? [root(i)] : []));
   pieces.forEach((p,i) => {
-    const component = root(i);
-    if (!groups.has(component)) groups.set(component, groups.size + 1);
-    p.group = groups.get(component)!; p.grounded = grounded.has(component);
-    if (!p.grounded) p.warnings.push('No connection to the bottom layer');
-    if (p.layer > 0 && p.belowMm2 === 0) p.warnings.push('No contact below — needs a different assembly order or support');
-    else if (p.layer > 0 && (p.belowMm2 < thickness * thickness || p.belowMm2 / p.areaMm2 < 0.1)) p.warnings.push('Small glue contact below');
     if (p.areaMm2 < thickness * thickness) p.warnings.push('Tiny piece');
     const piece = sources[i].piece;
     work += piece.outer.length + piece.holes.reduce((s,h) => s+h.length,0);
@@ -75,5 +60,5 @@ export function analyzeAssembly(result: SliceResult): AssemblyAnalysis {
     if (!inset.length) p.warnings.push('Narrow piece');
     else if (inset.length > 1) p.warnings.push('Narrow connecting neck');
   });
-  return { pieces, contacts, groups: groups.size, widthThresholdMm: thickness, areaThresholdMm2: thickness * thickness };
+  return assemblyFromContacts(pieces, contacts, thickness);
 }

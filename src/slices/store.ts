@@ -99,7 +99,7 @@ export function setSlicesPose(pose: SlicePose) {
     animationIndex: clip ? pose.animationIndex : -1,
     animationTime: clip && Number.isFinite(pose.animationTime) ? Math.max(0, Math.min(pose.animationTime, clip.duration)) : 0,
   };
-  const next = { ...document, pose: normalized };
+  const next = { ...document, pose: normalized, omittedPieceIds: [] };
   useSlicesStore.setState({ document: next, asset: sample(model, normalized) });
   void persist(next);
 }
@@ -115,7 +115,15 @@ export function setSliceSetup(patch: Partial<SliceSetup>) {
     && previous.samplingOffsetMm === setup.samplingOffsetMm
     && previous.repairMode === setup.repairMode && previous.repairGapMm === setup.repairGapMm
     && previous.rotationDeg.every((angle, i) => angle === setup.rotationDeg[i])) return;
-  const next = { ...document, setup };
+  const next = { ...document, setup, omittedPieceIds: [] };
+  useSlicesStore.setState({ document: next });
+  void persist(next);
+}
+
+export function setOmittedPieces(ids: string[]) {
+  const { document, busy } = useSlicesStore.getState();
+  if (!document || busy) return;
+  const next = { ...document, omittedPieceIds: [...new Set(ids)] };
   useSlicesStore.setState({ document: next });
   void persist(next);
 }

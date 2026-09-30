@@ -1,3 +1,4 @@
+import { suggestedOmissions, omitPieces } from './omissions';
 import { readFileSync } from 'node:fs';
 import { expect, it } from 'vitest';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -47,6 +48,11 @@ it.skipIf(!filename)('repairs the supplied Captain Toad rest pose without losing
     expect(assembly.groups).toBe(3);
     expect(assembly.pieces.filter(piece => !piece.grounded).map(piece => piece.id)).toEqual(['18.2', '18.7']);
     expect(assembly.pieces.filter(piece => piece.warnings.length)).toHaveLength(17);
+    repaired.assembly = assembly;
+    expect(suggestedOmissions(repaired)).toEqual(['18.1', '18.8']);
+    const retained = omitPieces(repaired, suggestedOmissions(repaired));
+    expect(retained.pieceCount).toBe(88);
+    expect(retained.assembly).toEqual(analyzeAssembly(retained));
     const plywood = plywoodGeometry(repaired);
     expect(plywood.boundingBox!.max.y - plywood.boundingBox!.min.y).toBeCloseTo(150);
     plywood.dispose();

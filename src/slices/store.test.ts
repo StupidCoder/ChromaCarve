@@ -1,3 +1,4 @@
+import { setOmittedPieces } from './store';
 import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { importSlicesModel, initializeSlices, setSlicesPose, setSliceSetup, useSlicesStore } from './store';
@@ -74,5 +75,18 @@ it('updates repair-only settings, persists them and rejects invalid tolerances',
   expect((await storage.readSlicesDocument())?.setup?.repairGapMm).toBe(1);
   setSliceSetup({ repairMode: 'strict' });
   expect(useSlicesStore.getState().document?.setup?.repairMode).toBe('strict');
+  await vi.waitFor(() => expect(useSlicesStore.getState().saveStatus).toBe('saved'));
+});
+
+it('saves omissions and clears them when piece identity changes', async () => {
+  await importSlicesModel(animatedModelFile());
+  setOmittedPieces(['18.1', '18.8']);
+  await vi.waitFor(() => expect(useSlicesStore.getState().saveStatus).toBe('saved'));
+  expect((await storage.readSlicesDocument())?.omittedPieceIds).toEqual(['18.1', '18.8']);
+  setSliceSetup({ sizeMm: 200 });
+  expect(useSlicesStore.getState().document?.omittedPieceIds).toEqual([]);
+  setOmittedPieces(['1.1']);
+  setSlicesPose({ animationIndex: 0, animationTime: 1 });
+  expect(useSlicesStore.getState().document?.omittedPieceIds).toEqual([]);
   await vi.waitFor(() => expect(useSlicesStore.getState().saveStatus).toBe('saved'));
 });

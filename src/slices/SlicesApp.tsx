@@ -1,15 +1,16 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ModelPoseControls } from '../components/ModelPoseControls';
 import { ModelViewport } from '../three/ModelViewport';
 import { WorkspaceSwitcher } from '../workspaces/WorkspaceSwitcher';
 import { navigateWorkspace } from '../workspaces/navigation';
 import { removeSlicesHandoff } from './storage';
-import { importSlicesModel, initializeSlices, setSlicesPose, useSlicesStore } from './store';
+import { importSlicesModel, initializeSlices, setOmittedPieces, setSlicesPose, useSlicesStore } from './store';
 import { DEFAULT_SLICE_SETUP } from './geometry/types';
 import { PhysicalSetup } from './PhysicalSetup';
 import { LayerInspector } from './LayerInspector';
 import { ComparisonViewport, type ComparisonView } from './ComparisonViewport';
 import { AssemblyInspector } from './AssemblyInspector';
+import { omitPieces } from './geometry/omissions';
 import { useSlicing } from './useSlicing';
 
 export default function SlicesApp({ handoff }: { handoff: string | null }) {
@@ -20,6 +21,7 @@ export default function SlicesApp({ handoff }: { handoff: string | null }) {
   useEffect(() => { comparisonView.current = undefined; }, [document?.source]);
   const setup = document?.setup ?? DEFAULT_SLICE_SETUP;
   const computation = useSlicing(asset, setup, !busy);
+  const retained = useMemo(() => computation.result && omitPieces(computation.result, document?.omittedPieceIds ?? []), [computation.result, document?.omittedPieceIds]);
   useEffect(() => {
     let active = true;
     void initializeSlices(handoff).then(() => {
@@ -76,11 +78,12 @@ export default function SlicesApp({ handoff }: { handoff: string | null }) {
             </label>}
             <p className={saveStatus === 'unavailable' ? 'warn' : 'muted'} role="status">
               {saveStatus === 'saving' ? 'Saving in this browser…' : saveStatus === 'saved'
-                ? 'Model, pose and setup saved in this browser.'
+                ? 'Model, pose, setup and omissions saved in this browser.'
                 : 'Browser storage is unavailable or full. This model is open, but changes may not survive a reload.'}
             </p>
           </>}
         </section>
+        {!!document?.omittedPieceIds?.length && <p className="muted">{document.omittedPieceIds.length} pieces omitted · {retained?.pieceCount ?? '…'} retained. Manage omissions in Assembly.</p>}
         <div>{asset && <PhysicalSetup asset={asset} setup={setup} disabled={busy} computation={computation} />}</div>
         <p className="slices-scope-note">Inspect the plywood shape before building. Inspect assembly contacts in the Assembly view. Markings and cutting-sheet export are coming next.</p>
       </aside>
@@ -103,14 +106,14 @@ export default function SlicesApp({ handoff }: { handoff: string | null }) {
               <ModelViewport asset={asset} viewQuaternion={document.viewQuaternion} showColors={showColors} modelRotationDeg={setup.rotationDeg} />
             </div>
           : view === 'compare' || view === 'assembly' ? <div role="tabpanel" id={view === 'assembly' ? 'assembly-preview' : 'compare-preview'} aria-labelledby={view === 'assembly' ? 'assembly-tab' : 'compare-tab'}>
-              {computation.result ? (view === 'assembly' ? <AssemblyInspector savedView={comparisonView} asset={asset} setup={setup}
+              {computation.result ? (view === 'assembly' ? <AssemblyInspector omittedIds={document.omittedPieceIds ?? []} onOmissionsChange={setOmittedPieces} retained={retained!} savedView={comparisonView} asset={asset} setup={setup}
                 result={computation.result} showColors={showColors} viewQuaternion={document.viewQuaternion} /> : <ComparisonViewport savedView={comparisonView} asset={asset} setup={setup}
-                result={computation.result} showColors={showColors} viewQuaternion={document.viewQuaternion} />)
+                result={retained!} showColors={showColors} viewQuaternion={document.viewQuaternion} />)
                 : <div className="slices-empty"><p role="status">{computation.error ?? (computation.status === 'cancelled'
                   ? 'Slicing cancelled. Use Retry slicing to continue.' : computation.progress?.phase ?? 'Preparing comparison…')}</p></div>}
             </div>
           : <div role="tabpanel" id="sections-preview" aria-labelledby="sections-tab">
-              {computation.result ? <LayerInspector result={computation.result} /> : <div className="slices-empty">
+              {computation.result ? <LayerInspector result={retained!} /> : <div className="slices-empty">
                 <p role="status">{computation.error ?? (computation.status === 'cancelled' ? 'Slicing cancelled. Use Retry slicing to continue.' : computation.progress?.phase ?? 'Preparing cross-sections…')}</p>
               </div>}
             </div>) :

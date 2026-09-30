@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { analyzeAssembly } from './assembly';
+import { omitPieces, suggestedOmissions } from './omissions';
 import { plywoodGeometry } from './plywood';
 import type { Point2, SlicePiece, SliceResult } from './types';
 const square = (x: number, y: number, size: number): Point2[] => [[x,y],[x+size,y],[x+size,y+size],[x,y+size]];
@@ -56,4 +57,20 @@ describe('assembly contacts and screening',()=>{
   it('refuses incomplete geometry rather than issuing a reassuring partial analysis',()=>{
     expect(()=>analyzeAssembly({...result([[piece(square(0,0,10))]]),valid:false})).toThrow('Resolve');
   });
+});
+
+it('suggests only tiny terminal details, preserving bases and bridges', () => {
+  const r = result([[piece(square(0,0,10))], [piece(square(0,0,0.5)),piece(square(5,5,0.5)),piece(square(8,8,2))], [piece(square(0,0,0.5))]]);
+  r.assembly = analyzeAssembly(r);
+  expect(suggestedOmissions(r)).toEqual(['2.2', '3.1']);
+  const kept = omitPieces(r, ['2.1']);
+  expect(kept.assembly).toEqual(analyzeAssembly(kept));
+  expect(kept.assembly!.pieces.find(p => p.id === '3.1')!.grounded).toBe(false);
+  expect(kept.layers[1].pieces.map(p => p.id)).toEqual(['2.2','2.3']);
+  expect(r.pieceCount).toBe(5);
+  expect(kept.pieceCount).toBe(4);
+  expect(omitPieces(r, []).pieceCount).toBe(5);
+  const empty = omitPieces(r, r.assembly.pieces.map(p => p.id));
+  expect(empty.assembly!.groups).toBe(0);
+  expect(empty.occupiedStackMm).toBe(0);
 });

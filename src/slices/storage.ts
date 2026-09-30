@@ -12,6 +12,7 @@ export interface SlicesDocument {
   viewQuaternion: [number, number, number, number];
   /** Optional only for milestone-1 projects and incoming model handoffs. */
   setup?: SliceSetup;
+  omittedPieceIds?: string[];
 }
 
 const CURRENT = 'current';
@@ -64,6 +65,10 @@ export async function readSlicesDocument(handoff?: string | null): Promise<Slice
   }
   if (doc.setup !== undefined && !validSliceSetup(doc.setup)) {
     throw new Error('The saved physical model settings are invalid. Please choose the model file again.');
+  }
+  if (doc.omittedPieceIds !== undefined && (!Array.isArray(doc.omittedPieceIds)
+    || doc.omittedPieceIds.length > 10000 || !doc.omittedPieceIds.every(id => typeof id === 'string' && /^\d+\.\d+$/.test(id)))) {
+    throw new Error('The saved piece omissions are invalid. Please choose the model file again.');
   }
   return { ...doc, setup: doc.setup ?? { ...DEFAULT_SLICE_SETUP, rotationDeg: [0, 0, 0] } };
 }
