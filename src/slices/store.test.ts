@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { importSlicesModel, initializeSlices, setSlicesPose, useSlicesStore } from './store';
+import { importSlicesModel, initializeSlices, setSlicesPose, setSliceSetup, useSlicesStore } from './store';
 import * as storage from './storage';
 import { animatedModelFile } from '../test/animatedModel';
 
@@ -49,4 +49,17 @@ describe('Slices workspace lifecycle', () => {
     expect(useSlicesStore.getState().asset).toBeUndefined();
     expect(useSlicesStore.getState().busy).toBe(false);
   });
+});
+
+
+it('keeps physical setup through pose edits and bounds offsets to the measured thickness', async () => {
+  await importSlicesModel(animatedModelFile());
+  setSliceSetup({ sizeMm: 200, samplingOffsetMm: 1 });
+  setSliceSetup({ thicknessMm: 1 });
+  expect(useSlicesStore.getState().document?.setup?.samplingOffsetMm).toBe(0.5);
+  setSlicesPose({ animationIndex: 0, animationTime: 1 });
+  expect(useSlicesStore.getState().document?.setup?.sizeMm).toBe(200);
+  setSliceSetup({ thicknessMm: NaN });
+  expect(useSlicesStore.getState().document?.setup?.thicknessMm).toBe(1);
+  await vi.waitFor(() => expect(useSlicesStore.getState().saveStatus).toBe('saved'));
 });

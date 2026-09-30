@@ -28,3 +28,25 @@ describe('browser project storage', () => {
     await expect(readSlicesDocument()).rejects.toThrow('cannot be read');
   });
 });
+
+
+describe('physical setup persistence', () => {
+  it('migrates milestone-1 projects to physical defaults', async () => {
+    await saveSlicesDocument(document('legacy.glb'));
+    expect((await readSlicesDocument())?.setup).toEqual({ sizeMm: 150, thicknessMm: 3, rotationDeg: [0, 0, 0], samplingOffsetMm: 0 });
+  });
+
+  it('restores measured thickness, rotation and sampling offset', async () => {
+    const project = document('physical.glb');
+    project.setup = { sizeMm: 234, thicknessMm: 2.85, rotationDeg: [45, -20, 10], samplingOffsetMm: -0.4 };
+    await saveSlicesDocument(project);
+    expect((await readSlicesDocument())?.setup).toEqual(project.setup);
+  });
+
+  it('rejects corrupt physical settings instead of silently changing the geometry', async () => {
+    const project = document('broken.glb');
+    project.setup = { sizeMm: 150, thicknessMm: 0, rotationDeg: [0, 0, 0], samplingOffsetMm: 0 };
+    await saveSlicesDocument(project);
+    await expect(readSlicesDocument()).rejects.toThrow('physical model settings are invalid');
+  });
+});

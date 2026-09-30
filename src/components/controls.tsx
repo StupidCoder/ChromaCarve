@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import {
   defaultPatternParams,
   defaultStoneParams,
@@ -90,6 +90,7 @@ export function NumberField({
   step?: number;
   onChange: (v: number) => void;
 }) {
+  const labelId = useId();
   // Local text state so the field can be cleared / partially typed (e.g. "", "-",
   // "1.") without ever pushing a NaN into the store. Only finite values commit;
   // the value is clamped and normalized on blur.
@@ -108,10 +109,11 @@ export function NumberField({
   return (
     <div className="field">
       <div className="field__label">
-        <span>{label}</span>
+        <span id={labelId}>{label}</span>
       </div>
       <input
         type="number"
+        aria-labelledby={labelId}
         value={text}
         min={min}
         max={max}

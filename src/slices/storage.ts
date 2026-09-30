@@ -1,3 +1,5 @@
+import { DEFAULT_SLICE_SETUP, validSliceSetup, type SliceSetup } from './geometry/types';
+
 export interface SlicePose {
   animationIndex: number;
   animationTime: number;
@@ -8,6 +10,8 @@ export interface SlicesDocument {
   source: { name: string; data: Blob };
   pose: SlicePose;
   viewQuaternion: [number, number, number, number];
+  /** Optional only for milestone-1 projects and incoming model handoffs. */
+  setup?: SliceSetup;
 }
 
 const CURRENT = 'current';
@@ -58,7 +62,10 @@ export async function readSlicesDocument(handoff?: string | null): Promise<Slice
     || !doc.viewQuaternion.every(Number.isFinite) || Math.hypot(...doc.viewQuaternion) < 0.001) {
     throw new Error('This saved Slices project cannot be read. Please choose the model file again.');
   }
-  return doc;
+  if (doc.setup !== undefined && !validSliceSetup(doc.setup)) {
+    throw new Error('The saved physical model settings are invalid. Please choose the model file again.');
+  }
+  return { ...doc, setup: doc.setup ?? { ...DEFAULT_SLICE_SETUP, rotationDeg: [0, 0, 0] } };
 }
 
 export const saveSlicesDocument = (document: SlicesDocument) => write(CURRENT, document);

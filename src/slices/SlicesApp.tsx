@@ -5,10 +5,17 @@ import { WorkspaceSwitcher } from '../workspaces/WorkspaceSwitcher';
 import { navigateWorkspace } from '../workspaces/navigation';
 import { removeSlicesHandoff } from './storage';
 import { importSlicesModel, initializeSlices, setSlicesPose, useSlicesStore } from './store';
+import { DEFAULT_SLICE_SETUP } from './geometry/types';
+import { PhysicalSetup } from './PhysicalSetup';
+import { LayerInspector } from './LayerInspector';
+import { useSlicing } from './useSlicing';
 
 export default function SlicesApp({ handoff }: { handoff: string | null }) {
   const { asset, model, document, busy, error, saveStatus } = useSlicesStore();
   const [showColors, setShowColors] = useState(true);
+  const [view, setView] = useState<'source' | 'sections'>('source');
+  const setup = document?.setup ?? DEFAULT_SLICE_SETUP;
+  const computation = useSlicing(asset, setup, !busy);
   useEffect(() => {
     let active = true;
     void initializeSlices(handoff).then(() => {
@@ -33,9 +40,9 @@ export default function SlicesApp({ handoff }: { handoff: string | null }) {
         <h1>Slices</h1>
         <p className="slices-intro">Start with a 3D model.<br />Choose the pose you want to build.</p>
         <ol className="slices-steps" aria-label="Workflow">
-          <li aria-current="step">Model</li>
-          <li>Slices <span>Coming next</span></li>
-          <li>Assembly</li>
+          <li aria-current={view === 'source' ? 'step' : undefined}>Model</li>
+          <li aria-current={view === 'sections' ? 'step' : undefined}>Slices</li>
+          <li>Assembly <span>Coming next</span></li>
           <li>Cutting sheets</li>
         </ol>
         <section className="slices-model-section" aria-labelledby="source-heading">
@@ -65,16 +72,33 @@ export default function SlicesApp({ handoff }: { handoff: string | null }) {
             </label>}
             <p className={saveStatus === 'unavailable' ? 'warn' : 'muted'} role="status">
               {saveStatus === 'saving' ? 'Saving in this browser…' : saveStatus === 'saved'
-                ? 'Model and pose saved in this browser.'
+                ? 'Model, pose and setup saved in this browser.'
                 : 'Browser storage is unavailable or full. This model is open, but changes may not survive a reload.'}
             </p>
           </>}
         </section>
-        <p className="slices-scope-note">Model setup is ready. Plywood slicing, comparison and cutting-sheet export are coming in the next milestones.</p>
+        <div>{asset && <PhysicalSetup asset={asset} setup={setup} disabled={busy} computation={computation} />}</div>
+        <p className="slices-scope-note">The assembled plywood comparison, assembly analysis and cutting-sheet export are coming in the next milestones.</p>
       </aside>
       <main className="slices-preview" aria-label="Model preview" aria-busy={busy}>
-        <div className="slices-preview-heading"><h2>Source model</h2><span>3D preview</span></div>
-        {asset && document ? <ModelViewport asset={asset} viewQuaternion={document.viewQuaternion} showColors={showColors} /> :
+        <div className="slices-preview-heading">
+          <div className="slices-preview-tabs" role="tablist" aria-label="Preview">
+            <button role="tab" id="source-tab" aria-selected={view === 'source'} aria-controls="source-preview"
+              onClick={() => setView('source')}>Source model</button>
+            <button role="tab" id="sections-tab" aria-selected={view === 'sections'} aria-controls="sections-preview"
+              disabled={!asset} onClick={() => setView('sections')}>Cross-sections</button>
+          </div>
+          <span>{view === 'source' ? '3D preview' : '2D layers'}</span>
+        </div>
+        {asset && document ? (view === 'source'
+          ? <div role="tabpanel" id="source-preview" aria-labelledby="source-tab">
+              <ModelViewport asset={asset} viewQuaternion={document.viewQuaternion} showColors={showColors} modelRotationDeg={setup.rotationDeg} />
+            </div>
+          : <div role="tabpanel" id="sections-preview" aria-labelledby="sections-tab">
+              {computation.result ? <LayerInspector result={computation.result} /> : <div className="slices-empty">
+                <p role="status">{computation.error ?? (computation.status === 'cancelled' ? 'Slicing cancelled. Use Retry slicing to continue.' : computation.progress?.phase ?? 'Preparing cross-sections…')}</p>
+              </div>}
+            </div>) :
           <div className="slices-empty">
             <svg viewBox="0 0 160 160" width="144" height="144" aria-hidden="true">
               <path d="M80 18 137 49 80 81 23 49Z M23 70 80 102 137 70 M23 91 80 123 137 91 M23 112 80 144 137 112" />
@@ -83,7 +107,7 @@ export default function SlicesApp({ handoff }: { handoff: string | null }) {
             <p>Choose a model to inspect its shape and pose,<br />or use “Open in Slices” in the Reliefs workspace.</p>
           </div>}
         {busy && <div className="slices-busy" role="status">Opening model…</div>}
-        {asset && <p className="slices-preview-help">Drag to orbit · Scroll to zoom · Right-drag to pan</p>}
+        {asset && view === 'source' && <p className="slices-preview-help">Drag to orbit · Scroll to zoom · Right-drag to pan</p>}
       </main>
     </div>
   </div>;

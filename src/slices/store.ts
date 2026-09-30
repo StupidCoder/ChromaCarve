@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { ModelAsset } from '../assets/assetStore';
 import { parseModelFile, type LoadedModel } from '../assets/modelFile';
 import { readSlicesDocument, saveSlicesDocument, type SlicePose, type SlicesDocument } from './storage';
+import { DEFAULT_SLICE_SETUP, validSliceSetup, type SliceSetup } from './geometry/types';
 
 interface SlicesState {
   document?: SlicesDocument;
@@ -46,7 +47,7 @@ async function install(document: SlicesDocument, token: number): Promise<void> {
   try { asset = sample(model, pose); }
   catch (error) { model.dispose(); throw error; }
   const previous = useSlicesStore.getState().model;
-  const next = { ...document, pose };
+  const next = { ...document, pose, setup: document.setup ?? { ...DEFAULT_SLICE_SETUP, rotationDeg: [0, 0, 0] as [number, number, number] } };
   useSlicesStore.setState({ model, asset, document: next, initialized: true, busy: false, error: undefined });
   previous?.dispose();
   await persist(next);
@@ -100,5 +101,20 @@ export function setSlicesPose(pose: SlicePose) {
   };
   const next = { ...document, pose: normalized };
   useSlicesStore.setState({ document: next, asset: sample(model, normalized) });
+  void persist(next);
+}
+
+export function setSliceSetup(patch: Partial<SliceSetup>) {
+  const { document, busy } = useSlicesStore.getState();
+  if (!document || busy) return;
+  const setup = { ...(document.setup ?? DEFAULT_SLICE_SETUP), ...patch };
+  setup.samplingOffsetMm = Math.max(-setup.thicknessMm / 2, Math.min(setup.thicknessMm / 2, setup.samplingOffsetMm));
+  if (!validSliceSetup(setup)) return;
+  const previous = document.setup;
+  if (previous && previous.sizeMm === setup.sizeMm && previous.thicknessMm === setup.thicknessMm
+    && previous.samplingOffsetMm === setup.samplingOffsetMm
+    && previous.rotationDeg.every((angle, i) => angle === setup.rotationDeg[i])) return;
+  const next = { ...document, setup };
+  useSlicesStore.setState({ document: next });
   void persist(next);
 }

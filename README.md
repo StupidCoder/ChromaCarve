@@ -21,10 +21,11 @@ npm test         # vitest unit tests
 ## Slices companion workspace
 
 Open **Slices** in the workspace switcher, or visit **`/slices/`** directly.
-Milestone 1 provides independent model setup: GLB/OBJ/STL import, animation-pose
-selection, an orbitable 3D source preview, and automatic browser-local restoration
-of the model and pose. Slicing, plywood comparison, assembly guides, and SVG
-cutting sheets are planned for subsequent milestones.
+Milestones 1–2 provide independent model setup and cross-section generation:
+GLB/OBJ/STL import, animation-pose selection, an orbitable 3D source preview,
+physical sizing, and automatic browser-local restoration. The **Cross-sections**
+view shows each generated layer, including holes and separate pieces. The assembled
+plywood comparison, assembly guides, and SVG cutting sheets are subsequent milestones.
 
 In **Reliefs → Foreground → Model**, use **Open in Slices** to transfer the original
 uploaded model and its selected animation pose. Primitives and bundled models
@@ -34,7 +35,7 @@ replacing its model does not change the relief project. Switching workspaces in
 the same tab preserves the relief project in memory; the existing relief JSON
 save/import behavior is unchanged.
 
-Slices stores the current source file and pose in IndexedDB on the same browser
+Slices stores the source file, pose, and physical setup in IndexedDB on the same browser
 and origin. Refreshing or opening `/slices/` in another tab restores the last saved
 Slices project without another upload. It is a local working copy, not a portable
 project backup: clearing site data removes it, and concurrent tabs share the last
@@ -46,7 +47,57 @@ the entire `dist` directory at the domain root. Static hosts that serve director
 index files can load and refresh `/slices/` without an SPA fallback or a new
 domain. The existing deployment pipeline should publish the nested entry along
 with shared assets. Tests cover parser ownership, original-source retention,
-handoff isolation, pose restoration, and storage-failure recovery.
+handoff isolation, pose restoration, storage-failure recovery, slicing geometry,
+and worker cancellation.
+
+### Physical setup and cross-sections
+
+- **Longest side:** sets the physical size in millimetres before rotation, with
+  proportions locked. Width, height, and depth are displayed alongside it.
+- **Measured plywood thickness:** the actual sheet thickness, not just its nominal
+  label. Every generated slab has this exact thickness.
+- **Slice direction:** choose horizontal, front-to-back, or side-to-side sections,
+  or rotate the model freely with XYZ Euler angles. Camera orbiting only changes
+  the view; it does not change the slice geometry.
+- **Sampling offset:** zero samples each slab at its midpoint. The allowed range
+  is ±half the material thickness. This moves the sampling plane inside a fixed
+  slab; it does not translate the slab or change the stack height.
+
+The layer count is `ceil(rotated model height / material thickness)`, allowing
+only numerical roundoff at exact multiples. The stack is centered around the
+model, so any extra height is shared equally above and below. A 10 mm-tall model
+in 3 mm plywood therefore has four layers spanning 12 mm. Requested dimensions,
+rotated dimensions, planned stack height, and the height difference remain
+explicit. If an offset creates empty layers, they keep their positions; the
+span of the remaining usable layers is reported separately and can contain gaps.
+
+Slicing takes an owned snapshot of the selected static pose. Its skinning,
+morphs, and node transforms have already been baked by the shared importer;
+physical scale and model rotation are applied in the worker. Changes cancel
+outdated work immediately and start a new job after a short debounce. The UI
+also provides **Cancel slicing** and **Retry slicing**.
+
+The first engine supports clean, consistently oriented, closed triangle meshes,
+including disconnected components and correctly oriented cavities. It checks
+welded mesh boundaries, face winding, and contour connectivity/intersections.
+Outer contours wind counterclockwise in the slice frame (X, −Z); holes wind
+clockwise. Open paths are never automatically closed. Overlapping solids,
+same-oriented nested shells, and zero-width tangent connections are flagged,
+not silently interpreted as valid cut pieces. Model repair and solid union are
+not implemented yet. Closed contours alone are not an assembly-strength check.
+
+Vertices on a slicing plane belong to its negative side: the result uses the
+positive-side limiting section. Coplanar triangles do not contribute contours;
+duplicate tangent edges cancel. A plane at the very top of a box is therefore
+empty. A small sampling-offset change can avoid critical planes where regions
+touch at a point. The layer inspector offers a shortcut to each invalid layer
+and shows failed segments in red. All layer drawings retain a common scale and
+origin, including empty layers.
+
+Browser workloads are bounded to 1,000,000 input triangles, 2,000 layers, and
+additional intersection/segment budgets. Exceeding a limit produces an
+instruction to simplify the model or increase thickness, rather than silently
+omitting geometry. No cut file is exported at this stage.
 
 ## The three parts
 

@@ -5,16 +5,18 @@ import type { ModelAsset } from '../assets/assetStore';
 import { createStudioEnvironment } from './studioEnvironment';
 
 const DEFAULT_VIEW: [number, number, number, number] = [0, 0, 0, 1];
+const DEFAULT_ROTATION: [number, number, number] = [0, 0, 0];
 
 /** Store-independent source viewer. Assets remain owned by the caller. */
-export function ModelViewport({ asset, viewQuaternion = DEFAULT_VIEW, showColors = true }: {
+export function ModelViewport({ asset, viewQuaternion = DEFAULT_VIEW, showColors = true, modelRotationDeg = DEFAULT_ROTATION }: {
   asset: ModelAsset;
   viewQuaternion?: [number, number, number, number];
   showColors?: boolean;
+  modelRotationDeg?: [number, number, number];
 }) {
   const host = useRef<HTMLDivElement>(null);
-  const current = useRef({ asset, showColors, viewQuaternion });
-  current.current = { asset, showColors, viewQuaternion };
+  const current = useRef({ asset, showColors, viewQuaternion, modelRotationDeg });
+  current.current = { asset, showColors, viewQuaternion, modelRotationDeg };
   const engine = useRef<{ update: () => void; reset: () => void } | null>(null);
   const [error, setError] = useState('');
 
@@ -47,6 +49,8 @@ export function ModelViewport({ asset, viewQuaternion = DEFAULT_VIEW, showColors
       const { asset: model, showColors: colors } = current.current;
       mesh.geometry = model.geometry;
       mesh.scale.setScalar(1 / Math.max(model.radius, 1e-8));
+      const [x, y, z] = current.current.modelRotationDeg.map(THREE.MathUtils.degToRad);
+      mesh.rotation.set(x, y, z, 'XYZ');
       const useStudio = colors && !!model.studioMaterials;
       if (useStudio) studio ??= createStudioEnvironment(renderer);
       scene.environment = useStudio ? studio!.texture : null;
@@ -100,7 +104,7 @@ export function ModelViewport({ asset, viewQuaternion = DEFAULT_VIEW, showColors
     };
   }, []);
 
-  useEffect(() => { engine.current?.update(); }, [asset, showColors]);
+  useEffect(() => { engine.current?.update(); }, [asset, showColors, modelRotationDeg]);
   useEffect(() => { engine.current?.reset(); }, [viewQuaternion]);
 
   return <div className="model-viewport-shell">
