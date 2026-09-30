@@ -1146,3 +1146,11 @@ button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 }
 .slices-preview-tabs button { white-space: nowrap; padding-left: 10px; padding-right: 10px; }
 @media (min-width: 701px) and (max-width: 1000px) { .slices-preview-tabs button { padding-left: 7px; padding-right: 7px; font-size: 12px; } }
+.sheet-downloads { flex-shrink: 0; margin-top: 0; gap: 8px; }
+.sheet-export-status { flex-shrink: 0; margin: 0; font-size: 12px; }
+@media (max-width: 700px) {
+  .slices-preview:has(#sheets-preview) { min-height: 900px; }
+  .cutting-inspector { gap: 10px; }
+  .sheet-controls { max-height: 37%; }
+  .sheet-downloads button { font-size: 12px; }
+}

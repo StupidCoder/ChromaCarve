@@ -21,12 +21,13 @@ npm test         # vitest unit tests
 ## Slices companion workspace
 
 Open **Slices** in the workspace switcher, or visit **`/slices/`** directly.
-Milestones 1–5 provide model setup, cross-sections, plywood comparison, assembly inspection and hidden markings:
+The complete Slices workflow provides model setup, cross-sections, plywood comparison, assembly inspection, hidden markings and cutting-sheet export:
 GLB/OBJ/STL import, animation-pose selection, an orbitable 3D source preview,
 physical sizing, and automatic browser-local restoration. The **Cross-sections**
 view shows each generated layer, including holes and separate pieces. **Compare**
 shows the original and assembled plywood side by side. **Markings** previews hidden
-alignment guides and piece numbers. Nested SVG cutting sheets are the next milestone.
+alignment guides and piece numbers. **Sheets** arranges retained pieces and exports
+millimetre SVG files or a ZIP with every sheet and a printable assembly guide.
 
 In **Reliefs → Foreground → Model**, use **Open in Slices** to transfer the original
 uploaded model and its selected animation pose. Primitives and bundled models
@@ -341,8 +342,8 @@ Generation runs in a cancellable worker; obsolete results are hidden immediately
 All geometry stays in the original millimetre slice frame, retaining piece IDs
 and physical layer positions. Nesting/export must transform each piece and its
 mark paths together. The 0.1 mm preview stroke is nominal, not a measured laser
-burn width. Cutting-sheet packing, kerf compensation and SVG download remain
-subsequent work.
+burn width. Cutting-sheet packing, kerf compensation and SVG download are available
+in **Sheets**, described below.
 
 
 ### Cutting sheets and kerf (milestone 6)
@@ -366,3 +367,50 @@ a silently filled hole. Packing reserves the entire burn envelope plus the part
 gap, and keeps the burn envelope inside the edge margin. Do not apply compensation
 again in laser software when it has already been applied here. Review assembly
 and marking warnings before fabrication; those warnings are not repaired by packing.
+
+
+### SVG and assembly-guide export (milestone 7)
+
+Use **Download sheet SVG** for the selected sheet, **Download all (ZIP)** for the
+complete job, or **Assembly guide** for the standalone printable HTML guide.
+The ZIP contains `sheet-01.svg`, additional numbered sheets as needed,
+`assembly-guide.html`, `project-summary.json`, and `README.txt`. No source mesh is
+embedded in the export. Downloads remain entirely local to the browser.
+
+Each SVG has physical `width` and `height` in millimetres, a matching viewBox,
+baked coordinates, no font dependency, and two named operation groups:
+
+- Blue `#0000ff`: hidden alignment and number marking paths.
+- Red `#ff0000`: closed cutting paths, holes before outside contours.
+
+Marks are written before cuts. Confirm operation order in the laser software,
+since importers can reorder paths. Import at 100% scale and keep the marked face
+up. Preview-only piece IDs, selection fills, sheet edges and margin lines are
+never exported as laser paths. Numbers are single-stroke paths; SVGs contain no
+text elements, images, clipping masks, or per-piece transforms. Nominal 0.1 mm
+stroke width is not a power/speed setting. ZIP output is uncompressed and bounded
+to 100 MB; oversized jobs can be downloaded sheet by sheet.
+
+The guide contains numbered sheet maps, a top view for every retained piece,
+its sheet location and rotation, above/below contacts and assembly/marking
+warnings. Tiny and narrow pieces have enlarged sheet-location details instead
+of overlapping map labels. Guide maps and thumbnails are references, not
+full-scale cutting templates. The JSON summary preserves setup, omissions,
+marking and sheet settings, and the per-piece inventory; it does not replace
+saving the original model. Project settings, including omissions, remain saved
+in browser storage.
+
+### Verification and practical limits
+
+The full suite covers original model imports, repair, contact analysis, omissions,
+hidden marking containment, packing gaps and bounds, kerf topology checks, rigid
+rotation, SVG operation order/units, ZIP checksums, escaping and saved settings.
+The optional Captain Toad integration test uses a locally supplied asset; no
+proprietary model data is checked into the repository. See
+`docs/slices-repair-captain-toad.md` for the measured example.
+
+Packing remains rectangle-based and can use more sheets than a polygon nesting
+optimizer. The app does not choose laser power/speed or simulate material
+strength. Some pieces cannot receive hidden IDs or enough alignment segments;
+the guide identifies these explicitly. Geometry and exported files have been
+verified in software; a physical laser-cut assembly has not been tested here.

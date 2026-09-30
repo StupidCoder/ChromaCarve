@@ -178,7 +178,7 @@ With the same 150 mm / 3 mm / 1 mm repair setup, the conservative omission filte
 
 Suggestions require a narrow piece, area and maximum face contact below 10% of material thickness squared, at most one neighboring piece, and a layer above the base. This screens fabrication difficulty and avoids suggesting connectors; it does not estimate perceptual importance. Users review the visual effect and can override individual omissions.
 
-Assembly displays omitted pieces as red stippled ghosts, with a visibility toggle. Compare and Cross-sections use only retained geometry. Contact areas, groups, grounding and warnings are recalculated from retained contacts; IDs and layer positions remain unchanged. Omissions persist with the project and reset after pose or physical setup changes. Future markings and cutting-sheet export must consume the retained result.
+Assembly displays omitted pieces as red stippled ghosts, with a visibility toggle. Compare and Cross-sections use only retained geometry. Contact areas, groups, grounding and warnings are recalculated from retained contacts; IDs and layer positions remain unchanged. Omissions persist with the project and reset after pose or physical setup changes. Markings and cutting-sheet export consume the retained result.
 
 Verification: the optional local model test asserts the two suggestions and checks the retained analysis against a fresh geometric analysis. Synthetic tests cover connector removal, protected base pieces, stable IDs and complete omission; persistence tests cover saving and invalidation. Browser checks covered batch and manual omission, red rendering, hiding, restoration and retained Compare geometry.
 
@@ -194,3 +194,26 @@ for two readable IDs. These are explicit review items, not exposed or truncated
 marks. The optional local integration test asserts these counts and verifies
 that omitted IDs cannot receive markings. A local diagnostic run generated the
 layout in approximately 53 ms (not a general performance guarantee).
+
+
+## Cutting sheets and final export
+
+At 600 × 400 mm sheet size, 5 mm margin, 2 mm part gap, zero kerf compensation and
+quarter-turns enabled, the 88 retained pieces pack onto two sheets (61 and 27
+pieces). Total retained area is approximately 188,819.84 mm², or 39.34% of both
+whole sheets. The second sheet uses only part of its width; this layout uses
+rectangular enclosures rather than polygon interlocking.
+
+The first SVG contains 61 outer cut paths, 10 hole paths and 1,294 marking paths;
+the second contains 27 outer cut paths, 2 hole paths and 704 marking paths. An
+independent Python XML/ZIP check verified physical 600 × 400 mm dimensions,
+closed cuts, separate blue/red operation groups, archive checksums, every piece
+exactly once and the absence of omitted IDs 18.1 and 18.8. Browser-generated ZIP
+and standalone SVG downloads were also read back and checked.
+
+Desktop and 390 px mobile reviews covered sheet selection, piece lookup and
+zoom, permanently accessible export buttons, and oversize errors disabling
+export. The assembly guide was visually reviewed, including enlarged location
+references for tiny pieces. Physical fabrication remains untested; the two
+floating pieces 18.2 and 18.7 and other contact/marking warnings remain visible
+in the exported guide, not silently resolved by nesting.

@@ -89,7 +89,7 @@ export default function SlicesApp({ handoff }: { handoff: string | null }) {
         </section>
         {!!document?.omittedPieceIds?.length && <p className="muted">{document.omittedPieceIds.length} pieces omitted · {retained?.pieceCount ?? '…'} retained. Manage omissions in Assembly.</p>}
         <div>{asset && <PhysicalSetup asset={asset} setup={setup} disabled={busy} computation={computation} />}</div>
-        <p className="slices-scope-note">Inspect the plywood shape before building. Inspect assembly contacts in the Assembly view. Review hidden guides and numbers in Markings. Arrange retained pieces in Sheets.</p>
+        <p className="slices-scope-note">Inspect the plywood shape before building. Inspect assembly contacts in the Assembly view. Review hidden guides and numbers in Markings. Arrange and export retained pieces in Sheets.</p>
       </aside>
       <main className="slices-preview" aria-label="Model preview" aria-busy={busy}>
         <div className="slices-preview-heading">
@@ -114,7 +114,7 @@ export default function SlicesApp({ handoff }: { handoff: string | null }) {
               <ModelViewport asset={asset} viewQuaternion={document.viewQuaternion} showColors={showColors} modelRotationDeg={setup.rotationDeg} />
             </div>
           : view === 'sheets' ? <div role="tabpanel" id="sheets-preview" aria-labelledby="sheets-tab">
-              {retained ? <CuttingSheets result={retained} settings={document.sheetSettings ?? DEFAULT_SHEETS} markingSettings={document.markingSettings ?? DEFAULT_MARKINGS} onSettingsChange={setSheetSettings} />
+              {retained ? <CuttingSheets exportContext={{ sourceName: document.source.name, setup, omittedIds: document.omittedPieceIds ?? [] }} result={retained} settings={document.sheetSettings ?? DEFAULT_SHEETS} markingSettings={document.markingSettings ?? DEFAULT_MARKINGS} onSettingsChange={setSheetSettings} />
                 : <div className="slices-empty"><p role="status">{computation.error ?? 'Generate slices to arrange cutting sheets.'}</p></div>}
             </div>
           : view === 'markings' ? <div role="tabpanel" id="markings-preview" aria-labelledby="markings-tab">

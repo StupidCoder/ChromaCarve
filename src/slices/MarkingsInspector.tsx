@@ -70,7 +70,7 @@ export function MarkingsInspector({ result, settings, onSettingsChange }: {
       <p className="muted">Top face, viewed from above. First number: this piece. “&gt;” number: next piece. Guides follow the next piece’s edge, inset by {mm(settings.clearanceMm + MARK_STROKE_MM/2)} mm into its material to their centerline. Allow that offset when aligning outer edges and holes.</p>
       {contacts.filter(c => c.warnings.length).map(c => <p className="warn" key={`${c.below}-${c.above}`}>{c.below} → {c.above}: {c.warnings.join(' ')}</p>)}
       {generated && pieces.filter(p => !contacts.some(c => c.below === p.id)).map(p => <p className="muted" key={p.id}>Piece {p.id}: no retained piece above; top face stays unmarked.</p>)}
-      <p className="muted">Select a piece to enlarge it. No exposed numbers are added when space is insufficient. Sheet nesting and SVG export are next.</p>
+      <p className="muted">Select a piece to enlarge it. No exposed numbers are added when space is insufficient. Arrange and download cutting sheets in Sheets.</p>
     </div>
   </section>;
 }
