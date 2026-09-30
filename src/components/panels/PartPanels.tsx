@@ -4,6 +4,8 @@ import { smoothingSegments } from '../../obj/smoothGeometry';
 import { BUNDLED_MODELS } from '../../obj/bundledModels';
 import { useProjectStore, type ModelSettings, type ModelSource } from '../../state/store';
 import { ObjRotationViewport } from '../ObjRotationViewport';
+import { ModelPoseControls } from '../ModelPoseControls';
+import { OpenInSlices } from '../../slices/OpenInSlices';
 import { SplineEditor } from '../SplineEditor';
 import {
   DepthRangeField,
@@ -47,7 +49,6 @@ function ModelSourcePicker({
   const output = useProjectStore((s) => s.project.output);
   useProjectStore((s) => s.assetVersion);
   const gltf = model.source === 'obj' ? getGltfAsset(model.assetRef) : undefined;
-  const clip = gltf?.animations[model.animationIndex ?? -1];
   const outAspect = Math.max(0.4, Math.min(2.5, output.widthMm / output.heightMm));
   const MAX_W = 248;
   const MAX_H = 220;
@@ -117,29 +118,10 @@ function ModelSourcePicker({
           </div>
         </>
       )}
-      {gltf && (
-        <>
-          {gltf.animations.length > 0 ? (
-            <>
-              <Select
-                label="Animation"
-                value={String(model.animationIndex ?? -1)}
-                options={[{ value: '-1', label: 'Rest pose' }, ...gltf.animations.map((a, i) => ({
-                  value: String(i), label: a.name || `Animation ${i + 1}`,
-                }))]}
-                onChange={(v) => setModel((m) => { m.animationIndex = Number(v); m.animationTime = 0; })}
-              />
-              {clip && clip.duration > 0 && (
-                <Slider label="Pose time" value={Math.min(model.animationTime ?? 0, clip.duration)}
-                  min={0} max={clip.duration} step={0.001}
-                  format={(v) => `${v.toFixed(3)} / ${clip.duration.toFixed(3)} s`}
-                  onChange={(v) => setModel((m) => { m.animationTime = v; })} />
-              )}
-              <div className="muted">Scrub to choose the pose used in the foreground and exports.</div>
-            </>
-          ) : <div className="muted">This GLB contains a static model (no animations).</div>}
-        </>
-      )}
+      {gltf && <ModelPoseControls animations={gltf.animations}
+        animationIndex={model.animationIndex ?? -1} animationTime={model.animationTime ?? 0}
+        onChange={(pose) => setModel((m) => { Object.assign(m, pose); })} />}
+      {allowGlb && <OpenInSlices model={model} />}
       {(model.source !== 'obj' || model.assetRef) && (
         <>
           <ObjRotationViewport

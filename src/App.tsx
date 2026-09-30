@@ -8,6 +8,7 @@ import { Splash } from './components/Splash';
 import { updateReliefPreview } from './relief/reliefController';
 import { useProjectStore } from './state/store';
 import { Viewer3D } from './three/Viewer3D';
+import { WorkspaceSwitcher } from './workspaces/WorkspaceSwitcher';
 
 export default function App() {
   const project = useProjectStore((s) => s.project);
@@ -35,7 +36,10 @@ export default function App() {
       <div className="stage">
         <Viewer3D />
       </div>
-      <img src="/ChromaCarve_small.png" alt="ChromaCarve" className="app-logo" />
+      <div className="workspace-brand">
+        <img src="/ChromaCarve_small.png" alt="ChromaCarve" />
+        <WorkspaceSwitcher active="reliefs" />
+      </div>
       <SettingsPanel />
       <PreviewPanel />
       <Footer />

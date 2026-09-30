@@ -1,8 +1,6 @@
 import * as THREE from 'three';
-import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { GltfAsset } from './gltfAsset';
-import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
+import { parseModelFile } from './modelFile';
 
 /**
  * In-memory registry for binary assets (uploaded images / OBJ models). These
@@ -125,74 +123,28 @@ export function ensureBundledModel(source: string, url: string): void {
     .finally(() => loadingBundles.delete(ref));
 }
 
-/** Recompute normals, center the geometry at the origin, compute bounding sphere. */
-function centerAndFinalize(geo: THREE.BufferGeometry): THREE.BufferGeometry {
-  geo.computeVertexNormals();
-  geo.computeBoundingBox();
-  const center = new THREE.Vector3();
-  geo.boundingBox!.getCenter(center);
-  geo.translate(-center.x, -center.y, -center.z);
-  geo.computeBoundingSphere();
-  return geo;
+/** Retain original uploads for transfer to another workspace. */
+const modelFiles = new Map<string, File>();
+export function getModelFile(ref: string | null): File | undefined {
+  return ref ? modelFiles.get(ref) : undefined;
 }
 
-/** Merge all meshes of an OBJ group into one centered position+normal geometry. */
-function mergeGroup(group: THREE.Object3D): THREE.BufferGeometry {
-  group.updateMatrixWorld(true);
-  const positions: number[] = [];
-  group.traverse((obj) => {
-    const mesh = obj as THREE.Mesh;
-    if (!mesh.isMesh) return;
-    let g = mesh.geometry.clone();
-    if (g.index) g = g.toNonIndexed();
-    g.applyMatrix4(mesh.matrixWorld);
-    const pos = g.getAttribute('position');
-    for (let i = 0; i < pos.count; i++) {
-      positions.push(pos.getX(i), pos.getY(i), pos.getZ(i));
-    }
-  });
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  return centerAndFinalize(geo);
-}
-
-/** Register a parsed geometry under `name`, replacing any existing entry. */
-function registerModel(name: string, geometry: THREE.BufferGeometry): string {
-  if (geometry.getAttribute('position').count === 0) {
-    throw new Error(`No geometry found in ${name}.`);
-  }
-  gltfs.get(name)?.dispose();
-  gltfs.delete(name);
-  models.get(name)?.geometry.dispose();
-  models.set(name, { geometry, radius: geometry.boundingSphere?.radius ?? 1 });
-  return name;
-}
-
-/** Parse an OBJ File, merge + center it, and register under its filename. */
-export async function loadObjFile(file: File): Promise<string> {
-  return registerModel(file.name, mergeGroup(new OBJLoader().parse(await file.text())));
-}
-
-/** Parse an STL File (binary or ASCII), center it, and register under its filename. */
-export async function loadStlFile(file: File): Promise<string> {
-  const geometry = new STLLoader().parse(await file.arrayBuffer());
-  return registerModel(file.name, centerAndFinalize(geometry));
-}
-
-/** Load an uploaded model file, dispatching to the GLB, OBJ or STL loader by extension. */
+/** Parse a model once and register it for the relief workspace. */
 export async function loadModelFile(file: File): Promise<string> {
-  if (/\.glb$/i.test(file.name)) {
-    const gltf = await new GLTFLoader().parseAsync(await file.arrayBuffer(), '');
-    const asset = new GltfAsset(gltf.scene, gltf.animations);
-    try { asset.sample(); } catch (e) { asset.dispose(); throw e; }
-    gltfs.get(file.name)?.dispose();
-    models.get(file.name)?.geometry.dispose();
-    models.delete(file.name);
-    gltfs.set(file.name, asset);
-    return file.name;
-  }
-  return /\.stl$/i.test(file.name) ? loadStlFile(file) : loadObjFile(file);
+  const loaded = await parseModelFile(file);
+  const oldGltf = gltfs.get(file.name);
+  if (oldGltf) oldGltf.dispose();
+  else models.get(file.name)?.geometry.dispose();
+  gltfs.delete(file.name);
+  models.delete(file.name);
+  if (loaded.gltf) gltfs.set(file.name, loaded.gltf);
+  else models.set(file.name, loaded.asset);
+  modelFiles.set(file.name, file);
+  return file.name;
 }
+
+export const loadObjFile = loadModelFile;
+export const loadStlFile = loadModelFile;
 
 /** Load a File into an HTMLImageElement and register it under its filename. */
 export async function loadImageFile(file: File): Promise<string> {

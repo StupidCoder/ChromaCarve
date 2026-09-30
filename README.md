@@ -18,6 +18,36 @@ npm run build    # type-check + production build
 npm test         # vitest unit tests
 ```
 
+## Slices companion workspace
+
+Open **Slices** in the workspace switcher, or visit **`/slices/`** directly.
+Milestone 1 provides independent model setup: GLB/OBJ/STL import, animation-pose
+selection, an orbitable 3D source preview, and automatic browser-local restoration
+of the model and pose. Slicing, plywood comparison, assembly guides, and SVG
+cutting sheets are planned for subsequent milestones.
+
+In **Reliefs → Foreground → Model**, use **Open in Slices** to transfer the original
+uploaded model and its selected animation pose. Primitives and bundled models
+transfer as static STL snapshots. Relief effects and physical dimensions are not
+transferred. Slices owns a separate model instance, so changing its pose or
+replacing its model does not change the relief project. Switching workspaces in
+the same tab preserves the relief project in memory; the existing relief JSON
+save/import behavior is unchanged.
+
+Slices stores the current source file and pose in IndexedDB on the same browser
+and origin. Refreshing or opening `/slices/` in another tab restores the last saved
+Slices project without another upload. It is a local working copy, not a portable
+project backup: clearing site data removes it, and concurrent tabs share the last
+saved copy. If storage is unavailable or full, direct imports remain usable and
+the workspace shows a persistence warning. Models are processed locally.
+
+`npm run build` emits both `dist/index.html` and `dist/slices/index.html`. Deploy
+the entire `dist` directory at the domain root. Static hosts that serve directory
+index files can load and refresh `/slices/` without an SPA fallback or a new
+domain. The existing deployment pipeline should publish the nested entry along
+with shared assets. Tests cover parser ownership, original-source retention,
+handoff isolation, pose restoration, and storage-failure recovery.
+
 ## The three parts
 
 The image is composited from three parts, combined by **priority replace**
