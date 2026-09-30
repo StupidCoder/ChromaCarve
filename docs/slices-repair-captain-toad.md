@@ -121,8 +121,8 @@ This is section repair, not a watertight 3D remesher. It does not infer thicknes
 for isolated sheets, use textures to reconstruct missing faces, fill all cavities,
 convex-hull the model, or bridge arbitrary gaps. Ambiguous branching paths and
 mesh winding/non-manifold errors still require intervention. Very small islands,
-point contacts and insufficient overlap between adjacent layers need the assembly
-analysis portion of milestone 4. Kerf, markings and sheet nesting are later work.
+point contacts and insufficient overlap between adjacent layers are inspected in
+the Assembly view added in milestone 4. Kerf, markings and sheet nesting are later work.
 
 ## Implementation and verification
 
@@ -157,3 +157,16 @@ Sources: [Clipper documentation](https://github.com/junmer/clipper-lib/blob/mast
 for integer polygon booleans. [Generalized winding numbers](https://users.cs.utah.edu/~ladislav/jacobson13robust/jacobson13robust.html)
 are a possible future fallback for more ambiguous open meshes; this implementation
 does not use them or claim to reconstruct arbitrary missing surfaces.
+
+## Assembly findings
+
+At the documented rest-pose settings, the 90 repaired pieces form **three connected
+groups**. Pieces **18.2 and 18.7** have no positive-area contact with either adjacent
+layer and no connection to the base. They are not made buildable merely by closing
+their contours. The remaining 88 pieces form one group connected to the bottom.
+
+The thickness-based screening rules flag **17 pieces** for review, including the
+two floating pieces. Use Assembly's piece selector or Next review piece to see the
+individual warnings and measured contact areas. Exploded spacing and layer reveal
+help inspect them without modifying the repaired outlines. Adding supports,
+removing unwanted fragments or choosing a different pose remains a user decision.

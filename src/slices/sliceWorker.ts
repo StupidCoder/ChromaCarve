@@ -1,3 +1,4 @@
+import { analyzeAssembly } from './geometry/assembly';
 import { sliceMesh } from './geometry/sliceMesh';
 import type { SliceInput, SliceProgress, SliceResult } from './geometry/types';
 
@@ -13,6 +14,11 @@ self.onmessage = (event: MessageEvent<SliceInput>) => {
         lastProgress = progress.fraction;
       }
     });
+    if (result.valid) {
+      self.postMessage({ type: 'progress', progress: { fraction: 1, phase: 'Checking assembly contacts' } } satisfies SliceWorkerResponse);
+      try { result.assembly = analyzeAssembly(result); }
+      catch (error) { result.assembly = { pieces: [], contacts: [], groups: 0, widthThresholdMm: 0, areaThresholdMm2: 0, error: error instanceof Error ? error.message : String(error) }; }
+    }
     self.postMessage({ type: 'result', result } satisfies SliceWorkerResponse);
   } catch (error) {
     self.postMessage({ type: 'error', message: error instanceof Error ? error.message : String(error) } satisfies SliceWorkerResponse);

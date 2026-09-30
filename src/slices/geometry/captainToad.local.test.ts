@@ -4,6 +4,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { GltfAsset } from '../../assets/gltfAsset';
 import { snapshotForSlicing } from './snapshot';
 import { sliceMesh } from './sliceMesh';
+import { analyzeAssembly } from './assembly';
 import { plywoodGeometry } from './plywood';
 import { DEFAULT_SLICE_SETUP } from './types';
 
@@ -42,6 +43,10 @@ it.skipIf(!filename)('repairs the supplied Captain Toad rest pose without losing
     expect(repaired.layers.reduce((sum, layer) => sum + layer.repair!.shortGaps, 0)).toBe(12);
     expect(repaired.layers.reduce((sum, layer) => sum + layer.repair!.attachedPaths, 0)).toBe(41);
     expect(repaired.layers[16].pieces.some((piece) => piece.holes.length)).toBe(true);
+    const assembly = analyzeAssembly(repaired);
+    expect(assembly.groups).toBe(3);
+    expect(assembly.pieces.filter(piece => !piece.grounded).map(piece => piece.id)).toEqual(['18.2', '18.7']);
+    expect(assembly.pieces.filter(piece => piece.warnings.length)).toHaveLength(17);
     const plywood = plywoodGeometry(repaired);
     expect(plywood.boundingBox!.max.y - plywood.boundingBox!.min.y).toBeCloseTo(150);
     plywood.dispose();

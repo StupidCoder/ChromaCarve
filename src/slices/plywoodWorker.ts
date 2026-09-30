@@ -5,7 +5,9 @@ self.onmessage = ({ data }: MessageEvent<SliceResult>) => {
     const geometry = plywoodGeometry(data);
     const positions = geometry.getAttribute('position').array as Float32Array;
     const normals = geometry.getAttribute('normal').array as Float32Array;
-    self.postMessage({ positions, normals }, { transfer: [positions.buffer, normals.buffer] });
+    const pieceIds = geometry.getAttribute('slicePiece').array as Float32Array;
+    const layerIds = geometry.getAttribute('sliceLayer').array as Float32Array;
+    self.postMessage({ positions, normals, pieceIds, layerIds }, { transfer: [positions.buffer, normals.buffer, pieceIds.buffer, layerIds.buffer] });
     geometry.dispose();
   } catch (error) {
     self.postMessage({ error: error instanceof Error ? error.message : 'Could not build the plywood preview.' });

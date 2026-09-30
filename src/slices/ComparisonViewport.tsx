@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useEffect, useRef, useState, type RefObject, type ReactNode } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { ModelAsset } from '../assets/assetStore';
@@ -7,9 +7,11 @@ import { physicalModelMatrix } from './geometry/plywood';
 import type { SliceResult, SliceSetup } from './geometry/types';
 import { mm } from './PhysicalSetup';
 
+export interface AssemblyView { gapMm: number; layersShown: number; selectedPiece: number; highlightWarnings: boolean }
 export type ComparisonView = { position: THREE.Vector3; up: THREE.Vector3; target: THREE.Vector3 };
 
-export function ComparisonViewport({ asset, setup, result, showColors, viewQuaternion, savedView }: {
+export function ComparisonViewport({ asset, setup, result, showColors, viewQuaternion, savedView, inspection, controlsSlot }: {
+  inspection?: AssemblyView; controlsSlot?: ReactNode;
   asset: ModelAsset; setup: SliceSetup; result: SliceResult; showColors: boolean;
   viewQuaternion: [number, number, number, number]; savedView: RefObject<ComparisonView | undefined>;
 }) {
@@ -17,6 +19,7 @@ export function ComparisonViewport({ asset, setup, result, showColors, viewQuate
   const left = useRef<HTMLDivElement>(null), right = useRef<HTMLDivElement>(null);
   const [built, setBuilt] = useState<{ result: SliceResult; geometry?: THREE.BufferGeometry; error?: string }>();
   const [renderError, setRenderError] = useState('');
+  const inspect = useRef(inspection); inspect.current = inspection;
   const colors = useRef(showColors); colors.current = showColors;
   const refresh = useRef<(() => void) | null>(null), reset = useRef<(() => void) | null>(null);
   useEffect(() => {
@@ -31,6 +34,11 @@ export function ComparisonViewport({ asset, setup, result, showColors, viewQuate
         geometry = new THREE.BufferGeometry();
         geometry.setAttribute('position', new THREE.BufferAttribute(data.positions, 3));
         geometry.setAttribute('normal', new THREE.BufferAttribute(data.normals, 3));
+        geometry.setAttribute('slicePiece', new THREE.BufferAttribute(data.pieceIds, 1));
+        geometry.setAttribute('sliceLayer', new THREE.BufferAttribute(data.layerIds, 1));
+        const warnings = new Float32Array(data.pieceIds.length);
+        for (let i = 0; i < warnings.length; i++) warnings[i] = result.assembly?.pieces[data.pieceIds[i]]?.warnings.length ? 1 : 0;
+        geometry.setAttribute('sliceWarning', new THREE.BufferAttribute(warnings, 1));
         geometry.computeBoundingBox();
         setBuilt({ result, geometry });
       }
@@ -66,10 +74,19 @@ export function ComparisonViewport({ asset, setup, result, showColors, viewQuate
     });
     const neutral = new THREE.MeshStandardMaterial({ color: 0xb9bec9, roughness: 0.8, side: THREE.DoubleSide });
     const wood = new THREE.MeshStandardMaterial({ color: 0xc8aa7d, roughness: 0.9 });
+    const uniforms = { gapMm: { value: 0 }, layersShown: { value: result.layers.length }, selectedPiece: { value: -1 }, highlightWarnings: { value: 0 } };
+    wood.onBeforeCompile = (shader) => {
+      Object.assign(shader.uniforms, uniforms);
+      shader.vertexShader = 'attribute float sliceLayer; attribute float slicePiece; attribute float sliceWarning; uniform float gapMm; varying float vSliceLayer; varying float vSlicePiece; varying float vSliceWarning;\n' + shader.vertexShader;
+      shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n transformed.y += sliceLayer * gapMm; vSliceLayer = sliceLayer; vSlicePiece = slicePiece; vSliceWarning = sliceWarning;');
+      shader.fragmentShader = 'uniform float layersShown; uniform float selectedPiece; uniform float highlightWarnings; varying float vSliceLayer; varying float vSlicePiece; varying float vSliceWarning;\n' + shader.fragmentShader;
+      shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\n if (vSliceLayer >= layersShown) discard; if (highlightWarnings > 0.5 && vSliceWarning > 0.5) diffuseColor.rgb = vec3(0.95,0.36,0.12); if (abs(vSlicePiece-selectedPiece) < 0.25) diffuseColor.rgb = vec3(0.12,0.7,1.0);');
+    };
     const source: THREE.Mesh = new THREE.Mesh(asset.geometry, neutral);
     source.matrixAutoUpdate = false;
     source.matrix.copy(physicalModelMatrix(asset.geometry, setup)).premultiply(new THREE.Matrix4().makeScale(1 / setup.sizeMm, 1 / setup.sizeMm, 1 / setup.sizeMm));
     const plywood = new THREE.Mesh(geometry, wood);
+    plywood.frustumCulled = false; // Exploded positions are moved in the vertex shader.
     plywood.scale.setScalar(1 / setup.sizeMm);
     scenes[0].add(source); scenes[1].add(plywood);
     const lights = scenes.map((scene, i) => {
@@ -83,6 +100,10 @@ export function ComparisonViewport({ asset, setup, result, showColors, viewQuate
     const bounds = new THREE.Box3().setFromObject(source).union(new THREE.Box3().setFromObject(plywood));
     const sphere = bounds.getBoundingSphere(new THREE.Sphere());
     const render = () => {
+      uniforms.gapMm.value = inspect.current?.gapMm ?? 0;
+      uniforms.layersShown.value = inspect.current?.layersShown ?? result.layers.length;
+      uniforms.selectedPiece.value = inspect.current?.selectedPiece ?? -1;
+      uniforms.highlightWarnings.value = inspect.current?.highlightWarnings ? 1 : 0;
       const useStudio = colors.current && !!asset.studioMaterials;
       if (useStudio) studio ??= createStudioEnvironment(renderer);
       source.material = (colors.current ? asset.studioMaterials ?? asset.materials : undefined) ?? neutral;
@@ -114,6 +135,10 @@ export function ComparisonViewport({ asset, setup, result, showColors, viewQuate
     };
     const callbacks = controls.map((control, i) => { const callback = () => sync(i); control.addEventListener('change', callback); return callback; });
     const resetView = () => {
+      const fitted = bounds.clone();
+      const last = Math.max(0, Math.min(result.layers.length, inspect.current?.layersShown ?? result.layers.length) - 1);
+      fitted.max.y = Math.max(fitted.max.y, (result.layers[last].topMm + (inspect.current?.gapMm ?? 0) * last) / setup.sizeMm);
+      fitted.getBoundingSphere(sphere);
       const camera = cameras[0];
       const half = THREE.MathUtils.degToRad(camera.fov / 2);
       const angle = Math.min(half, Math.atan(Math.tan(half) * camera.aspect));
@@ -135,6 +160,7 @@ export function ComparisonViewport({ asset, setup, result, showColors, viewQuate
       } else render();
     });
     resize.observe(element);
+    panes.forEach(pane => resize.observe(pane));
     const lost = (event: Event) => { event.preventDefault(); setRenderError('The 3D preview was interrupted. Reload to restore it.'); };
     renderer.domElement.addEventListener('webglcontextlost', lost);
     refresh.current = render; reset.current = resetView;
@@ -147,17 +173,18 @@ export function ComparisonViewport({ asset, setup, result, showColors, viewQuate
       renderer.dispose(); renderer.forceContextLoss(); renderer.domElement.remove();
     };
   }, [geometry, asset, setup, viewQuaternion, savedView]);
-  useEffect(() => { refresh.current?.(); }, [showColors]);
+  useEffect(() => { refresh.current?.(); }, [showColors, inspection]);
 
   const error = !result.valid ? 'Resolve the errors in Cross-sections to preview the complete plywood model.' : built?.result === result ? built.error : undefined;
   const dimensions = geometry?.boundingBox?.getSize(new THREE.Vector3());
   return <div className="slice-comparison">
     <div className="comparison-toolbar"><span>Same scale · Linked cameras</span><button onClick={() => reset.current?.()} disabled={!geometry}>Reset view</button></div>
+    {controlsSlot}
     <div className="comparison-canvas" ref={host}>
       <div className="comparison-pane" ref={left} tabIndex={0} role="img" aria-label="Original model. Drag to rotate both models. Arrow keys to pan."><span>Original</span></div>
       <div className="comparison-pane" ref={right} tabIndex={0} role="img" aria-label="Plywood model. Drag to rotate both models. Arrow keys to pan."><span>Plywood · {mm(setup.thicknessMm)} mm layers</span></div>
       {(error || renderError || !geometry) && <div className="comparison-status" role="status">{error || renderError || 'Building plywood preview…'}</div>}
     </div>
-    <p className="comparison-caption">{dimensions ? `${result.layers.length} layers · ${result.pieceCount} pieces · ${mm(dimensions.x)} × ${mm(dimensions.y)} × ${mm(dimensions.z)} mm (W × H × D)` : 'Exact slice contours at measured material thickness.'}<br />Drag either model to orbit · Scroll to zoom · Right-drag or arrow keys to pan</p>
+    <p className="comparison-caption">{dimensions ? `${result.layers.length} layers · ${result.pieceCount} pieces · ${mm(dimensions.x)} × ${mm(dimensions.y)} × ${mm(dimensions.z)} mm (W × H × D)` : 'Exact slice contours at measured material thickness.'}{inspection && ' · Assembled dimensions; exploded gaps are visual only.'}<br />Drag either model to orbit · Scroll to zoom · Right-drag or arrow keys to pan</p>
   </div>;
 }

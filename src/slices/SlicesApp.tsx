@@ -9,12 +9,13 @@ import { DEFAULT_SLICE_SETUP } from './geometry/types';
 import { PhysicalSetup } from './PhysicalSetup';
 import { LayerInspector } from './LayerInspector';
 import { ComparisonViewport, type ComparisonView } from './ComparisonViewport';
+import { AssemblyInspector } from './AssemblyInspector';
 import { useSlicing } from './useSlicing';
 
 export default function SlicesApp({ handoff }: { handoff: string | null }) {
   const { asset, model, document, busy, error, saveStatus } = useSlicesStore();
   const [showColors, setShowColors] = useState(true);
-  const [view, setView] = useState<'source' | 'sections' | 'compare'>('compare');
+  const [view, setView] = useState<'source' | 'sections' | 'compare' | 'assembly'>('compare');
   const comparisonView = useRef<ComparisonView | undefined>(undefined);
   useEffect(() => { comparisonView.current = undefined; }, [document?.source]);
   const setup = document?.setup ?? DEFAULT_SLICE_SETUP;
@@ -44,8 +45,8 @@ export default function SlicesApp({ handoff }: { handoff: string | null }) {
         <p className="slices-intro">Start with a 3D model.<br />Choose the pose you want to build.</p>
         <ol className="slices-steps" aria-label="Workflow">
           <li aria-current={view === 'source' ? 'step' : undefined}>Model</li>
-          <li aria-current={view !== 'source' ? 'step' : undefined}>Slices</li>
-          <li>Assembly <span>Coming next</span></li>
+          <li aria-current={view === 'sections' || view === 'compare' ? 'step' : undefined}>Slices</li>
+          <li aria-current={view === 'assembly' ? 'step' : undefined}>Assembly</li>
           <li>Cutting sheets</li>
         </ol>
         <section className="slices-model-section" aria-labelledby="source-heading">
@@ -81,7 +82,7 @@ export default function SlicesApp({ handoff }: { handoff: string | null }) {
           </>}
         </section>
         <div>{asset && <PhysicalSetup asset={asset} setup={setup} disabled={busy} computation={computation} />}</div>
-        <p className="slices-scope-note">Inspect the plywood shape before building. Assembly analysis and cutting-sheet export are coming in the next milestones.</p>
+        <p className="slices-scope-note">Inspect the plywood shape before building. Inspect assembly contacts in the Assembly view. Markings and cutting-sheet export are coming next.</p>
       </aside>
       <main className="slices-preview" aria-label="Model preview" aria-busy={busy}>
         <div className="slices-preview-heading">
@@ -92,6 +93,8 @@ export default function SlicesApp({ handoff }: { handoff: string | null }) {
               disabled={!asset} onClick={() => setView('compare')}>Compare</button>
             <button role="tab" id="sections-tab" aria-selected={view === 'sections'} aria-controls="sections-preview"
               disabled={!asset} onClick={() => setView('sections')}>Cross-sections</button>
+            <button role="tab" id="assembly-tab" aria-selected={view === 'assembly'} aria-controls="assembly-preview"
+              disabled={!asset} onClick={() => setView('assembly')}>Assembly</button>
           </div>
           <span>{view === 'sections' ? '2D layers' : '3D preview'}</span>
         </div>
@@ -99,9 +102,10 @@ export default function SlicesApp({ handoff }: { handoff: string | null }) {
           ? <div role="tabpanel" id="source-preview" aria-labelledby="source-tab">
               <ModelViewport asset={asset} viewQuaternion={document.viewQuaternion} showColors={showColors} modelRotationDeg={setup.rotationDeg} />
             </div>
-          : view === 'compare' ? <div role="tabpanel" id="compare-preview" aria-labelledby="compare-tab">
-              {computation.result ? <ComparisonViewport savedView={comparisonView} asset={asset} setup={setup}
-                result={computation.result} showColors={showColors} viewQuaternion={document.viewQuaternion} />
+          : view === 'compare' || view === 'assembly' ? <div role="tabpanel" id={view === 'assembly' ? 'assembly-preview' : 'compare-preview'} aria-labelledby={view === 'assembly' ? 'assembly-tab' : 'compare-tab'}>
+              {computation.result ? (view === 'assembly' ? <AssemblyInspector savedView={comparisonView} asset={asset} setup={setup}
+                result={computation.result} showColors={showColors} viewQuaternion={document.viewQuaternion} /> : <ComparisonViewport savedView={comparisonView} asset={asset} setup={setup}
+                result={computation.result} showColors={showColors} viewQuaternion={document.viewQuaternion} />)
                 : <div className="slices-empty"><p role="status">{computation.error ?? (computation.status === 'cancelled'
                   ? 'Slicing cancelled. Use Retry slicing to continue.' : computation.progress?.phase ?? 'Preparing comparison…')}</p></div>}
             </div>

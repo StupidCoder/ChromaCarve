@@ -30,6 +30,7 @@ export function polygonBoolean(epsilon: number) {
   };
   return {
     union: (...geometry: Geometry[]) => execute(geometry, [], ClipperLib.ClipType.ctUnion),
+    intersection: (subject: Geometry, clip: Geometry) => execute([subject], [clip], ClipperLib.ClipType.ctIntersection),
     difference: (subject: Geometry, clip: Geometry) => execute([subject], [clip], ClipperLib.ClipType.ctDifference),
   };
 }

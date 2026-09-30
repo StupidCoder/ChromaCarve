@@ -1095,3 +1095,14 @@ button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 .slice-repair-settings .toggle { align-items: flex-start; }
 .slice-original { fill: none; stroke: #edb46d; stroke-width: 1.2; }
 .slice-bridges { fill: none; stroke: #ed74ba; stroke-width: 1.8; stroke-dasharray: 4 3; }
+.assembly-controls { flex-shrink: 0; max-height: 42%; overflow: auto; padding: 0 10px 8px; font-size: 12px; }
+.assembly-controls p { margin: 6px 0; line-height: 1.5; }
+.assembly-fields { display: flex; gap: 20px; align-items: center; margin: 8px 0; }
+.assembly-fields > label { flex: 1; min-width: 0; }
+.assembly-fields input[type='range'], .assembly-fields select { display: block; width: 100%; margin-top: 4px; }
+.assembly-detail { display: flex; flex-direction: column; gap: 5px; padding: 8px; background: var(--panel-solid); border-radius: 6px; margin-bottom: 8px; }
+@media (max-width: 700px) {
+  .slices-preview:has(.assembly-controls) { height: 95dvh; min-height: 660px; }
+  .slices-preview-tabs { gap: 0; }
+  .slices-preview-tabs button { padding-left: 7px; padding-right: 7px; }
+}

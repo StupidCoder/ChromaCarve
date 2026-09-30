@@ -71,6 +71,7 @@ export interface SliceLayer {
 }
 
 export interface SliceResult {
+  assembly?: import('./assembly').AssemblyAnalysis;
   layers: SliceLayer[];
   /** Bounds in the slice frame (X, -Z, Y), after physical scaling and rotation. */
   bounds: { min: Point3; max: Point3 };

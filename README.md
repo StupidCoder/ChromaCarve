@@ -21,7 +21,7 @@ npm test         # vitest unit tests
 ## Slices companion workspace
 
 Open **Slices** in the workspace switcher, or visit **`/slices/`** directly.
-Milestones 1–3 provide independent model setup, cross-sections and a plywood comparison:
+Milestones 1–4 provide model setup, cross-sections, plywood comparison and assembly inspection:
 GLB/OBJ/STL import, animation-pose selection, an orbitable 3D source preview,
 physical sizing, and automatic browser-local restoration. The **Cross-sections**
 view shows each generated layer, including holes and separate pieces. **Compare**
@@ -278,3 +278,33 @@ with a specular highlight and a key light:
   reimplemented here on ChromaCarve's own noise primitives and code (no source was copied);
   the original shader is licensed CC BY-NC-SA 3.0. With thanks to the author.
 - 3D simplex noise: Ashima Arts / Stefan Gustavson (MIT, webgl-noise).
+
+### Assembly inspection (milestone 4)
+
+The **Assembly** tab checks the exact generated or repaired pieces in the slicing
+worker. It measures the glue-contact area between adjacent layers, excluding
+holes and zero-area edge/point contacts, and groups pieces by those connections.
+It distinguishes groups disconnected from the bottom layer from hanging pieces
+that connect through a higher layer and may require a different assembly order.
+Empty layers do not create connections across a gap.
+
+Review warnings identify tiny pieces, narrow pieces or connecting necks, and
+small contact areas. The initial screening thresholds scale with measured plywood
+thickness: area below thickness², glue contact below thickness² or 10% of the
+piece area, and width/neck screening using an inward offset of half the thickness.
+These are geometric heuristics, not strength guarantees; grain, glue, kerf,
+material variation and fragile protrusions still need judgment. The explanatory
+panel displays the actual thresholds. Separate connected groups need additional
+connections to form one assembled model.
+
+Orange highlights pieces with warnings. **Next review piece** steps through them;
+selecting any piece colors it blue, reports its area and contacts by piece ID,
+and hides layers above it. **Layers shown** can reveal the stack progressively.
+**Exploded gap** separates layers visually without changing fabrication geometry
+or reported assembled dimensions. Both panes retain synchronized cameras; use
+**Reset view** to fit the exploded stack. Inspection controls are temporary and
+reset when the generated result changes. Analysis errors are shown explicitly and
+do not prevent inspecting otherwise valid geometry in Compare.
+
+Hidden alignment/number markings and cutting-sheet nesting/export remain later
+milestones. No pieces are automatically deleted or bridged by assembly analysis.
